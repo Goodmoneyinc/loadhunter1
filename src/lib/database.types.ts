@@ -1,0 +1,240 @@
+/** Matches CHECK constraint on load_events.event_type */
+export type LoadEventTypeDb =
+  | 'arrived'
+  | 'checked_in'
+  | 'moved'
+  | 'loading_started'
+  | 'departed';
+
+export type Database = {
+  public: {
+    Tables: {
+      dispatchers: {
+        Row: {
+          id: string;
+          user_id: string | null;
+          company_name: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          user_id?: string | null;
+          company_name?: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          user_id?: string | null;
+          company_name?: string;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      drivers: {
+        Row: {
+          id: string;
+          dispatcher_id: string;
+          name: string;
+          phone: string;
+          created_at: string;
+          current_lat: number | null;
+          current_long: number | null;
+          last_gps_update: string | null;
+          is_tracking: boolean | null;
+          truck_id: string | null;
+          created_by: string | null;
+        };
+        Insert: {
+          id?: string;
+          dispatcher_id: string;
+          name?: string;
+          phone?: string;
+          created_at?: string;
+          current_lat?: number | null;
+          current_long?: number | null;
+          last_gps_update?: string | null;
+          is_tracking?: boolean | null;
+          truck_id?: string | null;
+          created_by?: string | null;
+        };
+        Update: {
+          id?: string;
+          dispatcher_id?: string;
+          name?: string;
+          phone?: string;
+          created_at?: string;
+          current_lat?: number | null;
+          current_long?: number | null;
+          last_gps_update?: string | null;
+          is_tracking?: boolean | null;
+          truck_id?: string | null;
+          created_by?: string | null;
+        };
+        Relationships: [];
+      };
+      loads: {
+        Row: {
+          id: string;
+          dispatcher_id: string;
+          driver_id: string | null;
+          status: string;
+          facility_address: string;
+          scheduled_time: string | null;
+          created_at: string;
+          facility_lat: string | null;
+          facility_long: string | null;
+          load_number: string;
+          tracking_id: string | null;
+        };
+        Insert: {
+          id?: string;
+          dispatcher_id: string;
+          driver_id?: string | null;
+          status?: string;
+          facility_address?: string;
+          scheduled_time?: string | null;
+          created_at?: string;
+          facility_lat?: string | null;
+          facility_long?: string | null;
+          load_number?: string;
+          tracking_id?: string | null;
+        };
+        Update: {
+          id?: string;
+          dispatcher_id?: string;
+          driver_id?: string | null;
+          status?: string;
+          facility_address?: string;
+          scheduled_time?: string | null;
+          created_at?: string;
+          facility_lat?: string | null;
+          facility_long?: string | null;
+          load_number?: string;
+          tracking_id?: string | null;
+        };
+        Relationships: [];
+      };
+      detention_events: {
+        Row: {
+          id: string;
+          load_id: string;
+          arrival_time: string | null;
+          departure_time: string | null;
+          gps_lat: string | null;
+          gps_long: string | null;
+          bol_url: string;
+          created_at: string;
+          status: string | null;
+        };
+        Insert: {
+          id?: string;
+          load_id: string;
+          arrival_time?: string | null;
+          departure_time?: string | null;
+          gps_lat?: string | null;
+          gps_long?: string | null;
+          bol_url?: string;
+          created_at?: string;
+          status?: string | null;
+        };
+        Update: {
+          id?: string;
+          load_id?: string;
+          arrival_time?: string | null;
+          departure_time?: string | null;
+          gps_lat?: string | null;
+          gps_long?: string | null;
+          bol_url?: string;
+          created_at?: string;
+          status?: string | null;
+        };
+        Relationships: [];
+      };
+      subscriptions: {
+        Row: {
+          id: string;
+          user_id: string;
+          stripe_customer_id: string | null;
+          stripe_subscription_id: string | null;
+          status: string;
+          plan_type: string | null;
+          current_period_end: string | null;
+          created_at: string | null;
+          updated_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          user_id: string;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          status?: string;
+          plan_type?: string | null;
+          current_period_end?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Update: {
+          id?: string;
+          user_id?: string;
+          stripe_customer_id?: string | null;
+          stripe_subscription_id?: string | null;
+          status?: string;
+          plan_type?: string | null;
+          current_period_end?: string | null;
+          created_at?: string | null;
+          updated_at?: string | null;
+        };
+        Relationships: [];
+      };
+      profiles: {
+        Row: {
+          id: string;
+        };
+        Insert: {
+          id: string;
+        };
+        Update: {
+          id?: string;
+        };
+        Relationships: [];
+      };
+      load_events: {
+        Row: {
+          id: string;
+          load_id: string;
+          event_type: LoadEventTypeDb;
+          timestamp: string;
+          gps_lat: string | null;
+          gps_long: string | null;
+          note: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          load_id: string;
+          event_type: LoadEventTypeDb;
+          timestamp?: string;
+          gps_lat?: string | null;
+          gps_long?: string | null;
+          note?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          load_id?: string;
+          event_type?: LoadEventTypeDb;
+          timestamp?: string;
+          gps_lat?: string | null;
+          gps_long?: string | null;
+          note?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+    };
+    Views: Record<string, never>;
+    Functions: Record<string, never>;
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
+  };
+};

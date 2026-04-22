@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 import { ArrowLeft, MapPin, Calendar, User, Clock, CheckCircle, AlertTriangle, Loader2, Upload, FileCheck, Download, Navigation } from 'lucide-react';
 import StatusBadge from '../components/StatusBadge';
 import LoadMap from '../components/LoadMap';
+import LoadTimeline from '../components/load/LoadTimeline';
 import { useGeofencing } from '../hooks/useGeofencing';
 import { generateDetentionClaimPDF } from '../lib/pdfGenerator';
 
@@ -510,6 +511,13 @@ export default function LoadDetail() {
               </p>
             )}
           </div>
+        </div>
+      )}
+
+      {id && (
+        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
+          <h3 className="text-lg font-bold text-white mb-4">Activity Timeline</h3>
+          <LoadTimeline loadId={id} />
         </div>
       )}
 

@@ -7,7 +7,11 @@ export type { Database } from './database.types';
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-export const supabase = createClient<Database>(supabaseUrl, supabaseAnonKey);
+export const createBrowserSupabaseClient = () =>
+  createClient<Database>(supabaseUrl, supabaseAnonKey);
+
+// Shared singleton for existing imports across the app.
+export const supabase = createBrowserSupabaseClient();
 
 declare global {
   interface Window {

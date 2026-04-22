@@ -39,6 +39,7 @@ const DEFAULT_SINGLE_LOAD_DETENTION: DetentionResult = {
   billableHours: 0,
   revenue: 0,
   isActive: false,
+  configUsed: { freeTimeHours: 0, ratePerHour: 0 },
 };
 
 export function useDetentionEngine(): ActiveDetentionEngineResult;

@@ -85,6 +85,8 @@ export type Database = {
           facility_long: string | null;
           load_number: string;
           tracking_id: string | null;
+          free_time_hours: number;
+          rate_per_hour: number;
         };
         Insert: {
           id?: string;
@@ -98,6 +100,8 @@ export type Database = {
           facility_long?: string | null;
           load_number?: string;
           tracking_id?: string | null;
+          free_time_hours?: number;
+          rate_per_hour?: number;
         };
         Update: {
           id?: string;
@@ -111,6 +115,8 @@ export type Database = {
           facility_long?: string | null;
           load_number?: string;
           tracking_id?: string | null;
+          free_time_hours?: number;
+          rate_per_hour?: number;
         };
         Relationships: [];
       };

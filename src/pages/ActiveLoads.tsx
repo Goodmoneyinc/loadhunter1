@@ -26,6 +26,8 @@ interface Load {
   facility_long: number | null;
   load_number?: string;
   weight?: number;
+  free_time_hours?: number;
+  rate_per_hour?: number;
 }
 
 function formatTime(iso: string) {
@@ -75,6 +77,8 @@ export default function ActiveLoads() {
     driver_id: '',
     facility_lat: '',
     facility_long: '',
+    free_time_hours: '2',
+    rate_per_hour: '75',
   });
   const [selectedLoad, setSelectedLoad] = useState<Load | null>(null);
   const [formError, setFormError] = useState('');
@@ -152,6 +156,13 @@ export default function ActiveLoads() {
       return;
     }
 
+    const freeTimeHours = formData.free_time_hours === '' ? 2 : Number(formData.free_time_hours);
+    const ratePerHour = formData.rate_per_hour === '' ? 75 : Number(formData.rate_per_hour);
+    if (Number.isNaN(freeTimeHours) || Number.isNaN(ratePerHour) || freeTimeHours < 0 || ratePerHour < 0) {
+      setFormError('Free time and detention rate must be non-negative numbers');
+      return;
+    }
+
     try {
       setSubmitting(true);
       setFormError('');
@@ -179,6 +190,8 @@ export default function ActiveLoads() {
         scheduled_time: new Date(formData.scheduled_time).toISOString(),
         driver_id: formData.driver_id,
         status: 'scheduled',
+        free_time_hours: freeTimeHours,
+        rate_per_hour: ratePerHour,
       };
 
       if (coordinates) {
@@ -192,7 +205,16 @@ export default function ActiveLoads() {
 
       if (insertError) throw insertError;
 
-      setFormData({ load_number: '', facility_address: '', scheduled_time: '', driver_id: '', facility_lat: '', facility_long: '' });
+      setFormData({
+        load_number: '',
+        facility_address: '',
+        scheduled_time: '',
+        driver_id: '',
+        facility_lat: '',
+        facility_long: '',
+        free_time_hours: '2',
+        rate_per_hour: '75',
+      });
       setShowModal(false);
       fetchLoads();
     } catch (err: any) {
@@ -543,7 +565,16 @@ export default function ActiveLoads() {
               <button
                 onClick={() => {
                   setShowModal(false);
-                  setFormData({ load_number: '', facility_address: '', scheduled_time: '', driver_id: '', facility_lat: '', facility_long: '' });
+                  setFormData({
+                    load_number: '',
+                    facility_address: '',
+                    scheduled_time: '',
+                    driver_id: '',
+                    facility_lat: '',
+                    facility_long: '',
+                    free_time_hours: '2',
+                    rate_per_hour: '75',
+                  });
                   setFormError('');
                 }}
                 className="p-2 text-gray-400 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
@@ -641,6 +672,41 @@ export default function ActiveLoads() {
                 />
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label htmlFor="free_time_hours" className="block text-sm font-bold text-gray-300 mb-2">
+                    Free Time (hours)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    id="free_time_hours"
+                    value={formData.free_time_hours}
+                    onChange={(e) => setFormData({ ...formData, free_time_hours: e.target.value })}
+                    className="w-full px-4 py-3 bg-[#1A1A1A] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#FF6B00] focus:ring-1 focus:ring-[#FF6B00] transition-colors"
+                    placeholder="2"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Default: 2 hours</p>
+                </div>
+                <div>
+                  <label htmlFor="rate_per_hour" className="block text-sm font-bold text-gray-300 mb-2">
+                    Detention Rate ($/hour)
+                  </label>
+                  <input
+                    type="number"
+                    step="5"
+                    min="0"
+                    id="rate_per_hour"
+                    value={formData.rate_per_hour}
+                    onChange={(e) => setFormData({ ...formData, rate_per_hour: e.target.value })}
+                    className="w-full px-4 py-3 bg-[#1A1A1A] border border-white/10 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-[#FF6B00] focus:ring-1 focus:ring-[#FF6B00] transition-colors"
+                    placeholder="75"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Default: $75/hour</p>
+                </div>
+              </div>
+
               <div>
                 <label htmlFor="driver" className="block text-sm font-bold text-gray-300 mb-2">
                   Assign Driver
@@ -671,7 +737,16 @@ export default function ActiveLoads() {
                   type="button"
                   onClick={() => {
                     setShowModal(false);
-                    setFormData({ load_number: '', facility_address: '', scheduled_time: '', driver_id: '', facility_lat: '', facility_long: '' });
+                    setFormData({
+                      load_number: '',
+                      facility_address: '',
+                      scheduled_time: '',
+                      driver_id: '',
+                      facility_lat: '',
+                      facility_long: '',
+                      free_time_hours: '2',
+                      rate_per_hour: '75',
+                    });
                     setFormError('');
                   }}
                   className="flex-1 px-4 py-3 bg-[#1A1A1A] border border-white/10 text-gray-300 font-bold rounded-lg hover:bg-white/5 transition-colors"

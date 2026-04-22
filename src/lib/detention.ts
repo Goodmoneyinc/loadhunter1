@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import type { LoadEvent } from '../types/load-events';
 
 export interface DetentionResult {
   arrivalTime: Date | null;
@@ -6,7 +7,8 @@ export interface DetentionResult {
   detentionStart: Date | null;
   billableHours: number;
   revenue: number;
-  isActive: boolean; // true if load hasn't departed yet
+  isActive: boolean;
+  configUsed: { freeTimeHours: number; ratePerHour: number };
 }
 
 export interface DetentionConfig {
@@ -22,17 +24,46 @@ const DEFAULT_CONFIG: DetentionConfig = {
 /**
  * Calculate detention based on load_events for a given load.
  * @param loadId - The UUID of the load
- * @param config - Optional override for free time and rate
+ * @param overrideConfig - Optional override for free time and rate (takes precedence over load config)
  * @param now - Optional current timestamp (defaults to new Date())
  */
 export async function calculateDetention(
   loadId: string,
-  config: Partial<DetentionConfig> = {},
+  overrideConfig: Partial<DetentionConfig> = {},
   now: Date = new Date()
 ): Promise<DetentionResult> {
-  const { freeTimeHours, ratePerHour } = { ...DEFAULT_CONFIG, ...config };
+  const { data: load, error: loadError } = await supabase
+    .from('loads')
+    .select('free_time_hours, rate_per_hour')
+    .eq('id', loadId)
+    .single();
 
-  // Fetch all events for this load, sorted by timestamp
+  if (loadError || !load) {
+    console.error('Failed to fetch load config:', loadError);
+    return computeDetention(
+      loadId,
+      {
+        freeTimeHours: overrideConfig.freeTimeHours ?? DEFAULT_CONFIG.freeTimeHours,
+        ratePerHour: overrideConfig.ratePerHour ?? DEFAULT_CONFIG.ratePerHour,
+      },
+      now
+    );
+  }
+
+  const config: DetentionConfig = {
+    freeTimeHours: overrideConfig.freeTimeHours ?? load.free_time_hours,
+    ratePerHour: overrideConfig.ratePerHour ?? load.rate_per_hour,
+  };
+
+  return computeDetention(loadId, config, now);
+}
+
+async function computeDetention(
+  loadId: string,
+  config: DetentionConfig,
+  now: Date
+): Promise<DetentionResult> {
+  const { freeTimeHours, ratePerHour } = config;
   const { data: events, error } = await supabase
     .from('load_events')
     .select('*')
@@ -48,22 +79,17 @@ export async function calculateDetention(
       billableHours: 0,
       revenue: 0,
       isActive: false,
+      configUsed: config,
     };
   }
 
-  // Find first 'arrived' event
-  const arrivalEvent = events.find((e) => e.event_type === 'arrived');
+  const arrivalEvent = events.find((e: LoadEvent) => e.event_type === 'arrived');
   const arrivalTime = arrivalEvent ? new Date(arrivalEvent.timestamp) : null;
-
-  // Find first 'checked_in' event (could be after arrival)
-  const checkInEvent = events.find((e) => e.event_type === 'checked_in');
+  const checkInEvent = events.find((e: LoadEvent) => e.event_type === 'checked_in');
   const checkInTime = checkInEvent ? new Date(checkInEvent.timestamp) : null;
-
-  // Find departure event (if any)
-  const departureEvent = events.find((e) => e.event_type === 'departed');
+  const departureEvent = events.find((e: LoadEvent) => e.event_type === 'departed');
   const departureTime = departureEvent ? new Date(departureEvent.timestamp) : null;
 
-  // No arrival -> no detention
   if (!arrivalTime) {
     return {
       arrivalTime: null,
@@ -72,19 +98,14 @@ export async function calculateDetention(
       billableHours: 0,
       revenue: 0,
       isActive: false,
+      configUsed: config,
     };
   }
 
-  // Determine the effective "stop time" for detention:
-  // - If departed, use departureTime
-  // - Otherwise use current time (now)
   const stopTime = departureTime || now;
   const isActive = !departureTime;
-
-  // Calculate detention start = arrival + freeTimeHours
   const detentionStart = new Date(arrivalTime.getTime() + freeTimeHours * 60 * 60 * 1000);
 
-  // If stop time is before detention start -> 0 billable hours
   let billableHours = 0;
   if (stopTime > detentionStart) {
     const diffMs = stopTime.getTime() - detentionStart.getTime();
@@ -100,5 +121,6 @@ export async function calculateDetention(
     billableHours,
     revenue,
     isActive,
+    configUsed: config,
   };
 }

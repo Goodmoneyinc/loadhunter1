@@ -81,9 +81,13 @@ export function DetentionCard({ loadId }: DetentionCardProps) {
             <p className="font-medium text-yellow-800">
               Detention starts in <span className="font-bold">{minutesLeft} min</span>
             </p>
-            <p className="mt-1 text-xs text-yellow-700">Free time: {detention.config?.freeTimeHours || 2}h included</p>
+            <p className="mt-1 text-xs text-yellow-700">Free time: {detention.configUsed.freeTimeHours}h included</p>
           </div>
         )}
+
+        <p className="text-xs text-gray-400">
+          Rate: ${detention.configUsed.ratePerHour}/h | Free: {detention.configUsed.freeTimeHours}h
+        </p>
 
         {detention.isActive && !isInFreeTime && (
           <div className="rounded bg-green-100 p-2 text-center">

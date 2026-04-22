@@ -18,6 +18,9 @@ export function LoadDetentionCard({ loadId }: { loadId: string }) {
       <p>Detention started: {detention.detentionStart?.toLocaleTimeString() || 'Not started'}</p>
       <p className="text-lg font-semibold">Billable hours: {detention.billableHours.toFixed(2)}h</p>
       <p className="text-xl text-green-700">Revenue: ${detention.revenue.toFixed(2)}</p>
+      <p className="text-xs text-gray-400">
+        Rate: ${detention.configUsed.ratePerHour}/h | Free: {detention.configUsed.freeTimeHours}h
+      </p>
       {detention.isActive && <p className="text-sm text-amber-600">(Clock is running)</p>}
     </div>
   );

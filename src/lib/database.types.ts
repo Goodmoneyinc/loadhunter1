@@ -233,7 +233,19 @@ export type Database = {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      insert_load_event_via_tracking: {
+        Args: {
+          p_tracking_id: string;
+          p_event_type: LoadEventTypeDb;
+          p_timestamp?: string;
+          p_gps_lat?: number | null;
+          p_gps_long?: number | null;
+          p_note?: string | null;
+        };
+        Returns: string;
+      };
+    };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;
   };

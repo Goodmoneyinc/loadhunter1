@@ -1,47 +1,6 @@
-/*
-  # Create BOL Storage Bucket
-
-  1. Storage
-    - Create `bol-documents` bucket for storing signed BOL photos
-    - Enable public access for uploaded documents
-    - Set up RLS policies for authenticated users
-
-  2. Security
-    - Allow authenticated users to upload BOL documents
-    - Allow public read access to BOL documents
-    - Restrict delete operations to service role only
-*/
-
--- Create the storage bucket for BOL documents
-INSERT INTO storage.buckets (id, name, public)
-VALUES ('bol-documents', 'bol-documents', true)
-ON CONFLICT (id) DO NOTHING;
-
--- Allow authenticated users to upload BOL documents
-CREATE POLICY "Authenticated users can upload BOL documents"
-  ON storage.objects
-  FOR INSERT
-  TO authenticated
-  WITH CHECK (bucket_id = 'bol-documents');
-
--- Allow public read access to BOL documents
-CREATE POLICY "Public read access to BOL documents"
-  ON storage.objects
-  FOR SELECT
-  TO public
-  USING (bucket_id = 'bol-documents');
-
--- Allow authenticated users to update their own BOL documents
-CREATE POLICY "Users can update BOL documents"
-  ON storage.objects
-  FOR UPDATE
-  TO authenticated
-  USING (bucket_id = 'bol-documents')
-  WITH CHECK (bucket_id = 'bol-documents');
-
--- Allow authenticated users to delete BOL documents
-CREATE POLICY "Authenticated users can delete BOL documents"
-  ON storage.objects
-  FOR DELETE
-  TO authenticated
-  USING (bucket_id = 'bol-documents');
+/*\n  # Create BOL Storage Bucket\n\n  1. Storage\n    - Create `bol-documents` bucket for storing signed BOL photos\n    - Enable public access for uploaded documents\n    - Set up RLS policies for authenticated users\n\n  2. Security\n    - Allow authenticated users to upload BOL documents\n    - Allow public read access to BOL documents\n    - Restrict delete operations to service role only\n*/\n\n-- Create the storage bucket for BOL documents\nINSERT INTO storage.buckets (id, name, public)\nVALUES ('bol-documents', 'bol-documents', true)\nON CONFLICT (id) DO NOTHING;
+\n\n-- Allow authenticated users to upload BOL documents\nCREATE POLICY "Authenticated users can upload BOL documents"\n  ON storage.objects\n  FOR INSERT\n  TO authenticated\n  WITH CHECK (bucket_id = 'bol-documents');
+\n\n-- Allow public read access to BOL documents\nCREATE POLICY "Public read access to BOL documents"\n  ON storage.objects\n  FOR SELECT\n  TO public\n  USING (bucket_id = 'bol-documents');
+\n\n-- Allow authenticated users to update their own BOL documents\nCREATE POLICY "Users can update BOL documents"\n  ON storage.objects\n  FOR UPDATE\n  TO authenticated\n  USING (bucket_id = 'bol-documents')\n  WITH CHECK (bucket_id = 'bol-documents');
+\n\n-- Allow authenticated users to delete BOL documents\nCREATE POLICY "Authenticated users can delete BOL documents"\n  ON storage.objects\n  FOR DELETE\n  TO authenticated\n  USING (bucket_id = 'bol-documents');
+;

@@ -1,56 +1,8 @@
-/*
-  # Create Subscriptions Table
-
-  1. New Tables
-    - `subscriptions`
-      - `id` (uuid, primary key)
-      - `user_id` (uuid, references auth.users)
-      - `stripe_customer_id` (text, unique)
-      - `stripe_subscription_id` (text, unique)
-      - `status` (text) - active, canceled, past_due, etc.
-      - `plan_type` (text) - solo, growth, fleet
-      - `current_period_end` (timestamptz)
-      - `created_at` (timestamptz)
-      - `updated_at` (timestamptz)
-
-  2. Security
-    - Enable RLS on `subscriptions` table
-    - Add policy for users to read their own subscription
-    - Add policy for service role to manage subscriptions
-
-  3. Important Notes
-    - Users can only view their own subscription data
-    - Webhook handler will use service role to update subscriptions
-    - Stripe customer ID must be unique to prevent duplicates
-*/
-
-CREATE TABLE IF NOT EXISTS subscriptions (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,
-  stripe_customer_id text UNIQUE,
-  stripe_subscription_id text UNIQUE,
-  status text NOT NULL DEFAULT 'inactive',
-  plan_type text,
-  current_period_end timestamptz,
-  created_at timestamptz DEFAULT now(),
-  updated_at timestamptz DEFAULT now()
-);
-
-ALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can view own subscription"
-  ON subscriptions
-  FOR SELECT
-  TO authenticated
-  USING (auth.uid() = user_id);
-
-CREATE POLICY "Service role can manage all subscriptions"
-  ON subscriptions
-  FOR ALL
-  TO service_role
-  USING (true)
-  WITH CHECK (true);
-
-CREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
-CREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer_id ON subscriptions(stripe_customer_id);
-CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
+/*\n  # Create Subscriptions Table\n\n  1. New Tables\n    - `subscriptions`\n      - `id` (uuid, primary key)\n      - `user_id` (uuid, references auth.users)\n      - `stripe_customer_id` (text, unique)\n      - `stripe_subscription_id` (text, unique)\n      - `status` (text) - active, canceled, past_due, etc.\n      - `plan_type` (text) - solo, growth, fleet\n      - `current_period_end` (timestamptz)\n      - `created_at` (timestamptz)\n      - `updated_at` (timestamptz)\n\n  2. Security\n    - Enable RLS on `subscriptions` table\n    - Add policy for users to read their own subscription\n    - Add policy for service role to manage subscriptions\n\n  3. Important Notes\n    - Users can only view their own subscription data\n    - Webhook handler will use service role to update subscriptions\n    - Stripe customer ID must be unique to prevent duplicates\n*/\n\nCREATE TABLE IF NOT EXISTS subscriptions (\n  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),\n  user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE NOT NULL,\n  stripe_customer_id text UNIQUE,\n  stripe_subscription_id text UNIQUE,\n  status text NOT NULL DEFAULT 'inactive',\n  plan_type text,\n  current_period_end timestamptz,\n  created_at timestamptz DEFAULT now(),\n  updated_at timestamptz DEFAULT now()\n);
+\n\nALTER TABLE subscriptions ENABLE ROW LEVEL SECURITY;
+\n\nCREATE POLICY "Users can view own subscription"\n  ON subscriptions\n  FOR SELECT\n  TO authenticated\n  USING (auth.uid() = user_id);
+\n\nCREATE POLICY "Service role can manage all subscriptions"\n  ON subscriptions\n  FOR ALL\n  TO service_role\n  USING (true)\n  WITH CHECK (true);
+\n\nCREATE INDEX IF NOT EXISTS idx_subscriptions_user_id ON subscriptions(user_id);
+\nCREATE INDEX IF NOT EXISTS idx_subscriptions_stripe_customer_id ON subscriptions(stripe_customer_id);
+\nCREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions(status);
+\n;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, Route } from 'lucide-react';
+import { DetentionLoadsList } from '@/components/DetentionLoadsList';
 import { DetentionRevenueSummary } from '@/components/DetentionRevenueSummary';
 import { SubscriptionStatus } from '@/components/SubscriptionStatus';
 import { useAuth } from '@/hooks/useAuth';
@@ -122,6 +123,11 @@ export default function DashboardPage() {
         <SubscriptionStatus />
 
         <DetentionRevenueSummary />
+
+        <section className="space-y-3">
+          <h2 className="text-xl font-bold text-gray-900">Loads with Detention</h2>
+          <DetentionLoadsList />
+        </section>
 
         <div className="flex justify-between items-center">
           <div>

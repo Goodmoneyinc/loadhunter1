@@ -3,9 +3,9 @@ import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { ArrowLeft, MapPin, Calendar, User, Clock, CheckCircle, AlertTriangle, Loader2, Upload, FileCheck, Download, Navigation } from 'lucide-react';
+import { LoadEventTimeline } from '@/components/LoadEventTimeline';
 import StatusBadge from '../components/StatusBadge';
 import LoadMap from '../components/LoadMap';
-import LoadTimeline from '../components/load/LoadTimeline';
 import { useGeofencing } from '../hooks/useGeofencing';
 import { generateDetentionClaimPDF } from '../lib/pdfGenerator';
 
@@ -515,9 +515,11 @@ export default function LoadDetail() {
       )}
 
       {id && (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-6">
-          <h3 className="text-lg font-bold text-white mb-4">Activity Timeline</h3>
-          <LoadTimeline loadId={id} />
+        <div className="rounded-xl border border-slate-800 bg-slate-900 p-4">
+          <div className="rounded-lg bg-white p-4">
+            <h2 className="text-lg font-semibold text-gray-900 mb-2">Timeline</h2>
+            <LoadEventTimeline loadId={id} />
+          </div>
         </div>
       )}
 

@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Loader2, Route } from 'lucide-react';
-import { SubscriptionStatus } from '../components/SubscriptionStatus';
-import { useAuth } from '../hooks/useAuth';
-import { supabase } from '../lib/supabase';
-import { getDispatcherId } from '../lib/dispatcher';
-import type { LoadEvent, LoadEventType } from '../lib/loadEvents';
+import { DetentionRevenueSummary } from '@/components/DetentionRevenueSummary';
+import { SubscriptionStatus } from '@/components/SubscriptionStatus';
+import { useAuth } from '@/hooks/useAuth';
+import { getDispatcherId } from '@/lib/dispatcher';
+import { supabase } from '@/lib/supabase';
+import type { LoadEvent, LoadEventType } from '@/lib/loadEvents';
 
 const EVENT_LABELS: Record<LoadEventType, string> = {
   arrived: 'Arrived at facility',
@@ -117,10 +118,12 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
         <SubscriptionStatus />
 
-        <div className="flex justify-between items-center mb-8">
+        <DetentionRevenueSummary />
+
+        <div className="flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Load activity</h1>
             <p className="text-sm text-gray-600 mt-1">

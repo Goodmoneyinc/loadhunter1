@@ -6,6 +6,7 @@ import StatusBadge from '../components/StatusBadge';
 import DashboardMap from '../components/DashboardMap';
 import DriverSimulator from '../components/DriverSimulator';
 import DetentionCalculator from '../components/DetentionCalculator';
+import { DetentionRevenueSummary } from '@/components/DetentionRevenueSummary';
 import LiveDetention from '../components/LiveDetention';
 import { useRealtimeStats } from '../hooks/useRealtimeStats';
 
@@ -174,6 +175,8 @@ export default function Dashboard() {
               <p className="text-[10px] text-gray-500">{leaderboardStats.percentageOfTarget}% of monthly target reached</p>
             </div>
           </div>
+
+          <DetentionRevenueSummary variant="dark" />
 
           <LiveDetention />
         </div>

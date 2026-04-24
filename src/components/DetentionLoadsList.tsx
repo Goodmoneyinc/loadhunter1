@@ -5,6 +5,7 @@ import { calculateDetention, type DetentionCalculationEvent } from '@/lib/detent
 import { getDispatcherId } from '@/lib/dispatcher';
 import { supabase } from '@/lib/supabase';
 import type { Load } from '@/types';
+import { SendToBrokerButton } from './SendToBrokerButton';
 
 type LoadDetentionRow = Pick<Load, 'id' | 'load_number' | 'status' | 'free_time_hours' | 'rate_per_hour'>;
 
@@ -16,23 +17,11 @@ interface DetentionLoad {
   detention_amount: number;
 }
 
-const STATUS_BADGE: Record<string, string> = {
-  in_transit: 'bg-emerald-100 text-emerald-800',
-  scheduled: 'bg-sky-100 text-sky-800',
-  in_facility: 'bg-amber-100 text-amber-800',
-  at_facility: 'bg-amber-100 text-amber-800',
-  arrived: 'bg-amber-100 text-amber-800',
-  delayed: 'bg-orange-100 text-orange-800',
-  completed: 'bg-slate-100 text-slate-800',
-  archived: 'bg-blue-100 text-blue-800',
-};
-
 function statusBadgeClass(status: string): string {
-  return STATUS_BADGE[status] ?? 'bg-gray-100 text-gray-800';
-}
-
-function statusLabel(status: string): string {
-  return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  if (status === 'billed') return 'bg-gray-100 text-gray-600';
+  if (status === 'Ready to submit') return 'bg-green-100 text-green-800';
+  if (status === 'Missing BOL') return 'bg-red-100 text-red-800';
+  return 'bg-yellow-100 text-yellow-800';
 }
 
 export function DetentionLoadsList() {
@@ -166,26 +155,22 @@ export function DetentionLoadsList() {
   return (
     <div className="space-y-3">
       {loads.map((load) => (
-        <div
-          key={load.id}
-          className="bg-white border border-gray-200 rounded-lg p-4 shadow-sm hover:shadow-md transition"
-        >
-          <div className="flex justify-between items-start gap-4">
-            <div className="min-w-0">
-              <h3 className="font-semibold text-gray-800">Load #{load.load_number}</h3>
-              <div className="flex flex-wrap items-center gap-2 mt-1">
-                <span
-                  className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${statusBadgeClass(load.status)}`}
-                >
-                  {statusLabel(load.status)}
-                </span>
-                <span className="text-xs text-gray-400">{load.detention_hours.toFixed(1)} billable hours</span>
-              </div>
+        <div key={load.id} className="bg-white border rounded-lg p-4 flex justify-between items-center">
+          <div>
+            <h3 className="font-semibold">Load #{load.load_number}</h3>
+            <div className="flex gap-2 mt-1">
+              <span className={`text-xs px-2 py-0.5 rounded ${statusBadgeClass(load.status)}`}>{load.status}</span>
+              <span className="text-xs text-gray-500">{load.detention_hours.toFixed(1)} hrs</span>
             </div>
-            <div className="text-right shrink-0">
-              <div className="text-xl font-bold text-green-700">${load.detention_amount.toFixed(2)}</div>
-              <div className="text-xs text-gray-400">detention amount</div>
-            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-xl font-bold text-green-700">${load.detention_amount.toFixed(2)}</div>
+            <SendToBrokerButton
+              loadId={load.id}
+              currentStatus={load.status}
+              detentionAmount={load.detention_amount}
+              onSuccess={() => void fetchDetentionLoads()}
+            />
           </div>
         </div>
       ))}

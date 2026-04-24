@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
+import { Download } from 'lucide-react';
 import { createBrowserSupabaseClient } from '../lib/supabase';
+import { generateDetentionReport } from '@/lib/reports/detentionReport';
+import { downloadDetentionReportPdf } from '@/lib/reports/detentionReportPdf';
 
 type EventType = 'arrived' | 'checked_in' | 'moved' | 'loading_started' | 'departed';
 
@@ -13,12 +16,14 @@ const EVENT_BUTTONS: { label: string; type: EventType }[] = [
 
 interface DriverHubProps {
   trackingId: string;
+  loadId: string;
   loadNumber?: string;
 }
 
-export default function DriverHub({ trackingId, loadNumber }: DriverHubProps) {
+export default function DriverHub({ trackingId, loadId, loadNumber }: DriverHubProps) {
   const supabase = createBrowserSupabaseClient();
   const [loading, setLoading] = useState<EventType | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [locationStatus, setLocationStatus] = useState<'granted' | 'denied' | 'prompt' | 'unknown'>('unknown');
 
@@ -167,6 +172,16 @@ export default function DriverHub({ trackingId, loadNumber }: DriverHubProps) {
             </button>
           ))}
         </div>
+
+        <button
+          type="button"
+          onClick={() => void handleDownloadDetentionPdf()}
+          disabled={loading !== null || pdfLoading}
+          className="w-full flex items-center justify-center gap-2 py-4 text-base font-semibold rounded-xl border-2 border-gray-300 bg-white text-gray-800 shadow-sm transition-all active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 hover:bg-gray-50"
+        >
+          <Download className="w-5 h-5 shrink-0" aria-hidden />
+          {pdfLoading ? 'Building PDF…' : 'Download detention report (PDF)'}
+        </button>
 
         <p className="text-xs text-center text-gray-400 mt-8">{locationText()}</p>
       </div>

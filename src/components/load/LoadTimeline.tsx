@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
-import type { LoadEvent, LoadEventType } from '../../types/load-events';
+import {
+  normalizeLoadEvent,
+  normalizeLoadEvents,
+  type LoadEvent,
+  type LoadEventRowInput,
+  type LoadEventType,
+} from '../../types/load-events';
 
 interface LoadTimelineProps {
   loadId: string;
@@ -55,7 +61,7 @@ export default function LoadTimeline({ loadId }: LoadTimelineProps) {
         console.error(fetchError);
         setError('Failed to load timeline.');
       } else {
-        setEvents(data ?? []);
+        setEvents(normalizeLoadEvents((data ?? []) as LoadEventRowInput[]));
       }
 
       setLoading(false);
@@ -74,7 +80,7 @@ export default function LoadTimeline({ loadId }: LoadTimelineProps) {
           filter: `load_id=eq.${loadId}`,
         },
         (payload) => {
-          const next = payload.new as LoadEvent;
+          const next = normalizeLoadEvent(payload.new as LoadEventRowInput);
           setEvents((prev) => {
             if (prev.some((event) => event.id === next.id)) return prev;
             const newEvents = [...prev, next];

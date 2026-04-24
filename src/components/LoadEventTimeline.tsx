@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
-import type { LoadEvent, LoadEventType } from '@/types/load-events';
+import {
+  normalizeLoadEvent,
+  normalizeLoadEvents,
+  type LoadEvent,
+  type LoadEventRowInput,
+  type LoadEventType,
+} from '@/types/load-events';
 
 export interface LoadEventTimelineProps {
   loadId: string;
@@ -72,7 +78,7 @@ export function LoadEventTimeline({ loadId }: LoadEventTimelineProps) {
           filter: `load_id=eq.${loadId}`,
         },
         (payload) => {
-          const row = payload.new as LoadEvent;
+          const row = normalizeLoadEvent(payload.new as LoadEventRowInput);
           setEvents((prev) => {
             if (prev.some((e) => e.id === row.id)) return prev;
             const next = [...prev, row];

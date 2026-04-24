@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import type { LoadEvent } from '../types/load-events';
+import { normalizeLoadEvents, type LoadEvent, type LoadEventRowInput } from '../types/load-events';
 
 export interface DetentionResult {
   arrivalTime: Date | null;
@@ -83,11 +83,12 @@ async function computeDetention(
     };
   }
 
-  const arrivalEvent = events.find((e: LoadEvent) => e.event_type === 'arrived');
+  const normalized = normalizeLoadEvents(events as LoadEventRowInput[]);
+  const arrivalEvent = normalized.find((e: LoadEvent) => e.event_type === 'arrived');
   const arrivalTime = arrivalEvent ? new Date(arrivalEvent.timestamp) : null;
-  const checkInEvent = events.find((e: LoadEvent) => e.event_type === 'checked_in');
+  const checkInEvent = normalized.find((e: LoadEvent) => e.event_type === 'checked_in');
   const checkInTime = checkInEvent ? new Date(checkInEvent.timestamp) : null;
-  const departureEvent = events.find((e: LoadEvent) => e.event_type === 'departed');
+  const departureEvent = normalized.find((e: LoadEvent) => e.event_type === 'departed');
   const departureTime = departureEvent ? new Date(departureEvent.timestamp) : null;
 
   if (!arrivalTime) {

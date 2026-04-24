@@ -7,7 +7,12 @@ import { SubscriptionStatus } from '@/components/SubscriptionStatus';
 import { useAuth } from '@/hooks/useAuth';
 import { getDispatcherId } from '@/lib/dispatcher';
 import { supabase } from '@/lib/supabase';
-import type { LoadEvent, LoadEventType } from '@/lib/loadEvents';
+import {
+  normalizeLoadEvents,
+  type LoadEvent,
+  type LoadEventRowInput,
+  type LoadEventType,
+} from '@/lib/loadEvents';
 
 const EVENT_LABELS: Record<LoadEventType, string> = {
   arrived: 'Arrived at facility',
@@ -85,7 +90,7 @@ export default function DashboardPage() {
         .limit(100);
 
       if (eventsError) throw eventsError;
-      setEvents((eventsData as LoadEvent[]) ?? []);
+      setEvents(normalizeLoadEvents((eventsData ?? []) as LoadEventRowInput[]));
     } catch (e) {
       console.error(e);
       setError('Failed to load events.');

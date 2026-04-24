@@ -214,6 +214,9 @@ export type Database = {
           gps_long: string | null;
           note: string | null;
           created_at: string;
+          source: 'system' | 'user';
+          edited_at: string | null;
+          original_timestamp: string | null;
         };
         Insert: {
           id?: string;
@@ -224,6 +227,9 @@ export type Database = {
           gps_long?: string | null;
           note?: string | null;
           created_at?: string;
+          source?: 'system' | 'user';
+          edited_at?: string | null;
+          original_timestamp?: string | null;
         };
         Update: {
           id?: string;
@@ -234,6 +240,9 @@ export type Database = {
           gps_long?: string | null;
           note?: string | null;
           created_at?: string;
+          source?: 'system' | 'user';
+          edited_at?: string | null;
+          original_timestamp?: string | null;
         };
         Relationships: [];
       };

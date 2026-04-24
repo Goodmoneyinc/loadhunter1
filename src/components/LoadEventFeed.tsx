@@ -1,6 +1,11 @@
 import { useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import type { LoadEvent } from '../types/load-events';
+import {
+  normalizeLoadEvent,
+  normalizeLoadEvents,
+  type LoadEvent,
+  type LoadEventRowInput,
+} from '../types/load-events';
 
 function formatTimestamp(value: string) {
   return new Date(value).toLocaleString('en-US', {
@@ -27,7 +32,7 @@ export function LoadEventFeed({ loadId }: { loadId: string }) {
         .order('timestamp', { ascending: false });
 
       if (!active) return;
-      if (data) setEvents(data);
+      if (data) setEvents(normalizeLoadEvents(data as LoadEventRowInput[]));
       setLoading(false);
     };
 
@@ -44,7 +49,7 @@ export function LoadEventFeed({ loadId }: { loadId: string }) {
           filter: `load_id=eq.${loadId}`,
         },
         (payload) => {
-          const next = payload.new as LoadEvent;
+          const next = normalizeLoadEvent(payload.new as LoadEventRowInput);
           setEvents((prev) => {
             if (prev.some((e) => e.id === next.id)) return prev;
             return [next, ...prev];

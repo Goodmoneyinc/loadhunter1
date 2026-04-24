@@ -1,11 +1,30 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import type { Database } from '../lib/database.types';
 import { supabase } from '../lib/supabase';
-import type { LoadEvent, LoadEventInsert } from '../types/load-events';
+import { normalizeLoadEvent, type LoadEvent, type LoadEventInsert } from '../types/load-events';
+
+type DbLoadEventInsert = Database['public']['Tables']['load_events']['Insert'];
+
+function toDbInsert(event: LoadEventInsert): DbLoadEventInsert {
+  return {
+    load_id: event.load_id,
+    event_type: event.event_type,
+    timestamp: event.timestamp,
+    gps_lat: event.gps_lat == null ? null : String(event.gps_lat),
+    gps_long: event.gps_long == null ? null : String(event.gps_long),
+    note: event.note ?? null,
+    id: event.id,
+    created_at: event.created_at,
+    source: event.source ?? 'system',
+    edited_at: event.edited_at ?? null,
+    original_timestamp: event.original_timestamp ?? null,
+  };
+}
 
 async function insertLoadEvent(event: LoadEventInsert): Promise<LoadEvent> {
   const { data, error } = await supabase
     .from('load_events')
-    .insert(event)
+    .insert(toDbInsert(event))
     .select()
     .single();
 
@@ -13,7 +32,7 @@ async function insertLoadEvent(event: LoadEventInsert): Promise<LoadEvent> {
     throw new Error(error.message);
   }
 
-  return data;
+  return normalizeLoadEvent(data);
 }
 
 export function useInsertLoadEvent(loadId: string) {
@@ -39,6 +58,9 @@ export function useInsertLoadEvent(loadId: string) {
         gps_long: newEvent.gps_long ?? null,
         note: newEvent.note ?? null,
         created_at: new Date().toISOString(),
+        source: newEvent.source ?? 'system',
+        edited_at: newEvent.edited_at ?? null,
+        original_timestamp: newEvent.original_timestamp ?? null,
       };
 
       utils.setQueryData<LoadEvent[]>(['loadEvents', loadId], (old = []) => [

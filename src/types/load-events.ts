@@ -17,6 +17,8 @@ export interface LoadEvent {
   source: 'system' | 'user';
   edited_at: string | null;
   original_timestamp: string | null;
+  timeline_override: boolean;
+  override_reason: string | null;
 }
 
 export interface LoadEventInsert {
@@ -31,6 +33,8 @@ export interface LoadEventInsert {
   source?: 'system' | 'user';
   edited_at?: string | null;
   original_timestamp?: string | null;
+  timeline_override?: boolean;
+  override_reason?: string | null;
 }
 
 export interface LoadEventUpdate {
@@ -42,6 +46,8 @@ export interface LoadEventUpdate {
   source?: 'system' | 'user';
   edited_at?: string | null;
   original_timestamp?: string | null;
+  timeline_override?: boolean;
+  override_reason?: string | null;
 }
 
 export const EVENT_TYPES = [
@@ -72,6 +78,8 @@ export type LoadEventRowInput = {
   source?: 'system' | 'user' | null;
   edited_at?: string | null;
   original_timestamp?: string | null;
+  timeline_override?: boolean | null;
+  override_reason?: string | null;
 };
 
 export function normalizeLoadEvent(row: LoadEventRowInput): LoadEvent {
@@ -87,6 +95,8 @@ export function normalizeLoadEvent(row: LoadEventRowInput): LoadEvent {
     source: row.source === 'user' ? 'user' : 'system',
     edited_at: row.edited_at ?? null,
     original_timestamp: row.original_timestamp ?? null,
+    timeline_override: row.timeline_override === true,
+    override_reason: row.override_reason ?? null,
   };
 }
 

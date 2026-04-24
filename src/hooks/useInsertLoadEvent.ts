@@ -18,6 +18,8 @@ function toDbInsert(event: LoadEventInsert): DbLoadEventInsert {
     source: event.source ?? 'system',
     edited_at: event.edited_at ?? null,
     original_timestamp: event.original_timestamp ?? null,
+    timeline_override: event.timeline_override ?? false,
+    override_reason: event.override_reason ?? null,
   };
 }
 
@@ -61,6 +63,8 @@ export function useInsertLoadEvent(loadId: string) {
         source: newEvent.source ?? 'system',
         edited_at: newEvent.edited_at ?? null,
         original_timestamp: newEvent.original_timestamp ?? null,
+        timeline_override: newEvent.timeline_override ?? false,
+        override_reason: newEvent.override_reason ?? null,
       };
 
       utils.setQueryData<LoadEvent[]>(['loadEvents', loadId], (old = []) => [

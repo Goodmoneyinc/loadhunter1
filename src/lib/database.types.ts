@@ -217,6 +217,8 @@ export type Database = {
           source: 'system' | 'user';
           edited_at: string | null;
           original_timestamp: string | null;
+          timeline_override: boolean;
+          override_reason: string | null;
         };
         Insert: {
           id?: string;
@@ -230,6 +232,8 @@ export type Database = {
           source?: 'system' | 'user';
           edited_at?: string | null;
           original_timestamp?: string | null;
+          timeline_override?: boolean;
+          override_reason?: string | null;
         };
         Update: {
           id?: string;
@@ -243,6 +247,44 @@ export type Database = {
           source?: 'system' | 'user';
           edited_at?: string | null;
           original_timestamp?: string | null;
+          timeline_override?: boolean;
+          override_reason?: string | null;
+        };
+        Relationships: [];
+      };
+      load_event_override_audit: {
+        Row: {
+          id: string;
+          load_event_id: string;
+          load_id: string;
+          overridden_by: string | null;
+          override_reason: string | null;
+          event_type: string;
+          event_timestamp: string;
+          previous_events: unknown;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          load_event_id: string;
+          load_id: string;
+          overridden_by?: string | null;
+          override_reason?: string | null;
+          event_type: string;
+          event_timestamp: string;
+          previous_events?: unknown;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          load_event_id?: string;
+          load_id?: string;
+          overridden_by?: string | null;
+          override_reason?: string | null;
+          event_type?: string;
+          event_timestamp?: string;
+          previous_events?: unknown;
+          created_at?: string;
         };
         Relationships: [];
       };
@@ -257,6 +299,18 @@ export type Database = {
           p_gps_lat?: number | null;
           p_gps_long?: number | null;
           p_note?: string | null;
+        };
+        Returns: string;
+      };
+      insert_load_event_override: {
+        Args: {
+          p_load_id: string;
+          p_event_type: LoadEventTypeDb;
+          p_timestamp?: string;
+          p_gps_lat?: number | null;
+          p_gps_long?: number | null;
+          p_note?: string | null;
+          p_override_reason?: string | null;
         };
         Returns: string;
       };

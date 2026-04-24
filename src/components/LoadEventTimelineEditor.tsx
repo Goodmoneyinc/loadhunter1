@@ -164,6 +164,8 @@ export function LoadEventTimelineEditor({ loadId }: { loadId: string }) {
   const [newEventTimestamp, setNewEventTimestamp] = useState(() =>
     toDatetimeLocalValue(new Date().toISOString())
   );
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [showFixTimeline, setShowFixTimeline] = useState(false);
 
   const fetchEvents = useCallback(async () => {
     setLoading(true);
@@ -267,6 +269,8 @@ export function LoadEventTimelineEditor({ loadId }: { loadId: string }) {
   };
 
   const handleAddEvent = async () => {
+    setValidationError(null);
+    setShowFixTimeline(false);
     const timestamp = new Date(newEventTimestamp).toISOString();
     const payload = toDbInsertForEditor({
       load_id: loadId,
@@ -278,13 +282,53 @@ export function LoadEventTimelineEditor({ loadId }: { loadId: string }) {
     const { data, error } = await supabase.from('load_events').insert(payload).select().single();
 
     if (error) {
-      window.alert('Failed to add event');
       console.error(error);
+      if (error.message.toLowerCase().includes('timeline order violation')) {
+        setValidationError(error.message);
+        setShowFixTimeline(true);
+      } else {
+        window.alert('Failed to add event');
+      }
       return;
     }
 
     const row = normalizeLoadEvent(data as LoadEventRowInput);
     setEvents((prev) => sortByTimestamp([...prev, row]));
+  };
+
+  const handleFixTimeline = async () => {
+    const timestamp = new Date(newEventTimestamp).toISOString();
+    const reason = `Dispatcher override from Timeline Editor (${newEventType})`;
+    const { data, error } = await supabase.rpc('insert_load_event_override', {
+      p_load_id: loadId,
+      p_event_type: newEventType,
+      p_timestamp: timestamp,
+      p_override_reason: reason,
+    });
+
+    if (error) {
+      window.alert('Override failed');
+      console.error(error);
+      return;
+    }
+
+    const insertedId = data as string;
+    const { data: insertedRow, error: fetchError } = await supabase
+      .from('load_events')
+      .select('*')
+      .eq('id', insertedId)
+      .single();
+
+    if (fetchError || !insertedRow) {
+      console.error(fetchError);
+      void fetchEvents();
+      return;
+    }
+
+    const row = normalizeLoadEvent(insertedRow as LoadEventRowInput);
+    setEvents((prev) => sortByTimestamp([...prev, row]));
+    setValidationError(null);
+    setShowFixTimeline(false);
   };
 
   const handleDragEnd = async (dragEvent: DragEndEvent) => {
@@ -406,7 +450,21 @@ export function LoadEventTimelineEditor({ loadId }: { loadId: string }) {
           >
             + Add Event
           </button>
+          {showFixTimeline && (
+            <button
+              type="button"
+              onClick={() => void handleFixTimeline()}
+              className="rounded bg-amber-600 px-4 py-1 text-white hover:bg-amber-700"
+            >
+              Fix Timeline (Override)
+            </button>
+          )}
         </div>
+        {validationError ? (
+          <p className="mt-2 text-xs text-amber-700">
+            {validationError}. Use Fix Timeline only when you need a manual correction. This action is audited.
+          </p>
+        ) : null}
       </div>
 
       {saving ? <div className="mt-2 text-xs text-gray-400">Saving reorder...</div> : null}

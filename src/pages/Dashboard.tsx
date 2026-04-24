@@ -7,6 +7,7 @@ import DashboardMap from '../components/DashboardMap';
 import DriverSimulator from '../components/DriverSimulator';
 import DetentionCalculator from '../components/DetentionCalculator';
 import { DetentionRevenueSummary } from '@/components/DetentionRevenueSummary';
+import DetentionRevenueBar from '@/components/DetentionRevenueBar';
 import LiveDetention from '../components/LiveDetention';
 import { useRealtimeStats } from '../hooks/useRealtimeStats';
 
@@ -108,6 +109,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6 bg-[#1A1A1A] min-h-screen">
       <SubscriptionBanner />
+      <DetentionRevenueBar />
 
       <div className="rounded-xl p-6 border border-white/10 bg-[#0F0F0F]">
         <h2 className="text-2xl font-bold text-white tracking-wide uppercase mb-2">Command Center</h2>

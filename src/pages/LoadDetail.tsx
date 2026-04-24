@@ -2,12 +2,14 @@ import 'leaflet/dist/leaflet.css';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { ArrowLeft, MapPin, Calendar, User, Clock, CheckCircle, AlertTriangle, Loader2, Upload, FileCheck, Download, Navigation } from 'lucide-react';
+import { ArrowLeft, MapPin, Calendar, User, Clock, CheckCircle, AlertTriangle, Loader2, Upload, FileCheck, Download, Navigation, Mail } from 'lucide-react';
 import { LoadEventTimeline } from '@/components/LoadEventTimeline';
 import StatusBadge from '../components/StatusBadge';
 import LoadMap from '../components/LoadMap';
 import { useGeofencing } from '../hooks/useGeofencing';
-import { generateDetentionClaimPDF } from '../lib/pdfGenerator';
+import { useLiveDetentionCalculator } from '../hooks/useLiveDetentionCalculator';
+import { generateDetentionInvoicePDF } from '../lib/pdfGenerator';
+import { DetentionSummaryCard } from '@/components/DetentionSummaryCard';
 
 interface Load {
   id: string;
@@ -18,6 +20,8 @@ interface Load {
   driver_id: string;
   facility_lat: number | null;
   facility_long: number | null;
+  free_time_hours: number;
+  rate_per_hour: number;
 }
 
 interface Driver {
@@ -36,6 +40,14 @@ interface DetentionEvent {
   bol_url: string | null;
 }
 
+interface LoadEventProof {
+  event_type: string;
+  timestamp: string;
+  gps_lat: string | null;
+  gps_long: string | null;
+  note: string | null;
+}
+
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export default function LoadDetail() {
@@ -46,6 +58,9 @@ export default function LoadDetail() {
   const [detentionEvent, setDetentionEvent] = useState<DetentionEvent | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState<'arrival' | 'departure' | 'bol' | null>(null);
+  const [invoiceLoading, setInvoiceLoading] = useState<'download' | 'email' | null>(null);
+  const [invoiceEmail, setInvoiceEmail] = useState('');
+  const [invoiceMessage, setInvoiceMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [error, setError] = useState('');
   const [geoNotification, setGeoNotification] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -66,6 +81,32 @@ export default function LoadDetail() {
 
   useEffect(() => {
     fetchLoadDetails();
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+
+    const channel = supabase
+      .channel(`load-detail-${id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'detention_events', filter: `load_id=eq.${id}` },
+        () => {
+          void fetchLoadDetails();
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'loads', filter: `id=eq.${id}` },
+        () => {
+          void fetchLoadDetails();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
   }, [id]);
 
   async function fetchLoadDetails() {
@@ -296,32 +337,27 @@ export default function LoadDetail() {
     }
   }
 
-  function calculateDetentionTime() {
-    if (!detentionEvent?.arrival_time || !detentionEvent?.departure_time) return null;
-
-    const arrival = new Date(detentionEvent.arrival_time).getTime();
-    const departure = new Date(detentionEvent.departure_time).getTime();
-    const hours = (departure - arrival) / (1000 * 60 * 60);
-
-    return hours;
-  }
-
   function formatDuration(hours: number): string {
     const h = Math.floor(hours);
     const m = Math.round((hours - h) * 60);
     return `${h}h ${m}m`;
   }
 
-  function handleDownloadPDF() {
+  async function buildInvoice() {
     if (!detentionEvent?.arrival_time || !detentionEvent?.departure_time || !load || !driver) return;
 
-    const hours = calculateDetentionTime();
-    if (hours === null) return;
+    const arrival = new Date(detentionEvent.arrival_time).getTime();
+    const departure = new Date(detentionEvent.departure_time).getTime();
+    const hours = (departure - arrival) / (1000 * 60 * 60);
+    const cost = Math.max(0, (hours - load.free_time_hours) * load.rate_per_hour);
 
-    const billableHours = Math.max(0, hours - 2);
-    const cost = billableHours * 75;
+    const { data: timelineEvents } = await supabase
+      .from('load_events')
+      .select('event_type, timestamp, gps_lat, gps_long, note')
+      .eq('load_id', load.id)
+      .order('timestamp', { ascending: true });
 
-    generateDetentionClaimPDF({
+    return generateDetentionInvoicePDF({
       companyName: 'Logistics Pro',
       loadNumber: load.load_number || load.id.slice(0, 8),
       facilityAddress: load.facility_address,
@@ -331,7 +367,96 @@ export default function LoadDetail() {
       calculatedCost: cost,
       driverName: driver.name,
       gpsVerified: !!(detentionEvent.gps_lat && detentionEvent.gps_long),
+      ratePerHour: load.rate_per_hour,
+      freeTimeHours: load.free_time_hours,
+      arrivalGpsLat: detentionEvent.gps_lat ? String(detentionEvent.gps_lat) : null,
+      arrivalGpsLong: detentionEvent.gps_long ? String(detentionEvent.gps_long) : null,
+      bolImageUrl: detentionEvent.bol_url,
+      timelineEvents: (timelineEvents ?? []).map((event: LoadEventProof) => ({
+        eventType: event.event_type,
+        timestamp: event.timestamp,
+        gpsLat: event.gps_lat,
+        gpsLong: event.gps_long,
+        note: event.note,
+      })),
     });
+  }
+
+  async function handleDownloadPDF() {
+    try {
+      setInvoiceLoading('download');
+      setInvoiceMessage(null);
+      const invoice = await buildInvoice();
+      if (!invoice) return;
+
+      const url = URL.createObjectURL(invoice.blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = invoice.filename;
+      anchor.click();
+      URL.revokeObjectURL(url);
+      setInvoiceMessage({ type: 'success', text: 'Invoice generated and downloaded.' });
+    } catch (err: any) {
+      setInvoiceMessage({ type: 'error', text: err.message || 'Failed to generate invoice.' });
+    } finally {
+      setInvoiceLoading(null);
+    }
+  }
+
+  async function handleEmailInvoice() {
+    if (!invoiceEmail.trim()) {
+      setInvoiceMessage({ type: 'error', text: 'Enter an email address first.' });
+      return;
+    }
+
+    try {
+      setInvoiceLoading('email');
+      setInvoiceMessage(null);
+      const invoice = await buildInvoice();
+      if (!invoice) return;
+
+      const arrayBuffer = await invoice.blob.arrayBuffer();
+      let binary = '';
+      const bytes = new Uint8Array(arrayBuffer);
+      const chunkSize = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+      }
+      const pdfBase64 = btoa(binary);
+
+      const baseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+      if (!baseUrl) throw new Error('VITE_SUPABASE_URL is missing.');
+      const endpoint = `${baseUrl}/functions/v1/send-detention-invoice`;
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+        },
+        body: JSON.stringify({
+          loadId: load.id,
+          recipientEmail: invoiceEmail.trim(),
+          filename: invoice.filename,
+          pdfBase64,
+        }),
+      });
+
+      const result = await response.json();
+      if (!response.ok || !result.success) {
+        throw new Error(result.error || 'Failed to send invoice email.');
+      }
+
+      setInvoiceMessage({ type: 'success', text: `Invoice sent to ${invoiceEmail.trim()}.` });
+    } catch (err: any) {
+      setInvoiceMessage({ type: 'error', text: err.message || 'Failed to send invoice.' });
+    } finally {
+      setInvoiceLoading(null);
+    }
   }
 
   if (loading) {
@@ -393,10 +518,21 @@ export default function LoadDetail() {
     );
   }
 
-  const detentionHours = calculateDetentionTime();
   const hasArrived = !!detentionEvent?.arrival_time;
   const hasDeparted = !!detentionEvent?.departure_time;
-  const overThreshold = detentionHours !== null && detentionHours > 2;
+  const {
+    current_detention_amount,
+    formatted_detention_amount,
+    current_detention_hours,
+    current_billable_hours,
+  } = useLiveDetentionCalculator({
+    arrival_time: detentionEvent?.arrival_time,
+    departure_time: detentionEvent?.departure_time,
+    free_time_hours: load.free_time_hours,
+    rate_per_hour: load.rate_per_hour,
+  });
+  const detentionHours = hasArrived ? current_detention_hours : null;
+  const overThreshold = current_billable_hours > 0;
 
   return (
     <div className="space-y-6">
@@ -481,6 +617,13 @@ export default function LoadDetail() {
           )}
         </div>
       </div>
+
+      <DetentionSummaryCard
+        arrivalTime={detentionEvent?.arrival_time}
+        departureTime={detentionEvent?.departure_time}
+        freeTimeHours={load.free_time_hours}
+        ratePerHour={load.rate_per_hour}
+      />
 
       {load.facility_lat && load.facility_long && (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
@@ -598,13 +741,13 @@ export default function LoadDetail() {
                 {overThreshold && (
                   <div className="mt-4 pt-4 border-t border-orange-500/20">
                     <p className="text-sm font-semibold text-orange-400 mb-2">
-                      PAYABLE DETENTION: {formatDuration(detentionHours - 2)}
+                      PAYABLE DETENTION: {formatDuration(current_billable_hours)}
                     </p>
                     <p className="text-xs text-slate-400">
                       Billable time beyond 2-hour threshold
                     </p>
                     <p className="text-xs text-slate-500 mt-2">
-                      Estimated cost: <span className="font-semibold text-orange-400">${Math.round((detentionHours - 2) * 75)}</span>
+                      Estimated cost: <span className="font-semibold text-orange-400">{formatted_detention_amount}</span>
                     </p>
                   </div>
                 )}
@@ -709,13 +852,41 @@ export default function LoadDetail() {
           )}
 
           {hasDeparted && detentionEvent?.arrival_time && detentionEvent?.departure_time && (
-            <button
-              onClick={handleDownloadPDF}
-              className="w-full py-5 bg-gradient-to-r from-orange-600 to-orange-500 text-white font-bold text-lg rounded-xl shadow-lg shadow-orange-500/30 hover:shadow-orange-500/40 hover:from-orange-500 hover:to-orange-400 transition-all flex items-center justify-center gap-3 touch-manipulation active:scale-[0.98]"
-            >
-              <Download className="w-6 h-6" />
-              <span>Download Detention Claim</span>
-            </button>
+            <div className="space-y-3 rounded-xl border border-slate-700 bg-slate-800/50 p-4">
+              <p className="text-sm font-semibold text-white">Generate Detention Invoice</p>
+              <button
+                onClick={() => void handleDownloadPDF()}
+                disabled={invoiceLoading !== null}
+                className="w-full py-4 bg-gradient-to-r from-orange-600 to-orange-500 text-white font-bold text-lg rounded-xl shadow-lg shadow-orange-500/30 hover:shadow-orange-500/40 hover:from-orange-500 hover:to-orange-400 disabled:opacity-60 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-3 touch-manipulation active:scale-[0.98]"
+              >
+                {invoiceLoading === 'download' ? <Loader2 className="w-6 h-6 animate-spin" /> : <Download className="w-6 h-6" />}
+                <span>Download PDF</span>
+              </button>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="email"
+                  value={invoiceEmail}
+                  onChange={(event) => setInvoiceEmail(event.target.value)}
+                  placeholder="Enter recipient email"
+                  className="h-11 w-full rounded-lg border border-slate-600 bg-slate-900 px-3 text-sm text-white placeholder:text-slate-500 focus:border-orange-500 focus:outline-none"
+                />
+                <button
+                  onClick={() => void handleEmailInvoice()}
+                  disabled={invoiceLoading !== null}
+                  className="h-11 rounded-lg bg-blue-600 px-4 text-sm font-semibold text-white hover:bg-blue-500 disabled:opacity-60 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {invoiceLoading === 'email' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
+                  Send
+                </button>
+              </div>
+
+              {invoiceMessage && (
+                <p className={`text-sm ${invoiceMessage.type === 'success' ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {invoiceMessage.text}
+                </p>
+              )}
+            </div>
           )}
 
           {hasDeparted && (

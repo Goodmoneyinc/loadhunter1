@@ -1,5 +1,6 @@
 import { supabase } from './supabase';
 import { normalizeLoadEvents, type LoadEvent, type LoadEventRowInput } from '../types/load-events';
+import { calculateDetention as calcDetentionUtil } from './detentionUtils';
 
 export interface DetentionResult {
   arrivalTime: Date | null;
@@ -103,17 +104,15 @@ async function computeDetention(
     };
   }
 
-  const stopTime = departureTime || now;
   const isActive = !departureTime;
   const detentionStart = new Date(arrivalTime.getTime() + freeTimeHours * 60 * 60 * 1000);
-
-  let billableHours = 0;
-  if (stopTime > detentionStart) {
-    const diffMs = stopTime.getTime() - detentionStart.getTime();
-    billableHours = Math.max(0, diffMs / (1000 * 60 * 60));
-  }
-
-  const revenue = billableHours * ratePerHour;
+  const { detentionHours: billableHours, detentionAmount: revenue } = calcDetentionUtil({
+    arrivalTime,
+    // Preserve deterministic behavior for active loads by using injected `now`.
+    departureTime: departureTime ?? now,
+    freeTimeHours,
+    ratePerHour,
+  });
 
   return {
     arrivalTime,

@@ -69,7 +69,6 @@ export default function DriverTracking() {
   return (
     <DriverHub
       trackingId={trackingId as string}
-      loadId={load.id}
       loadNumber={load.load_number}
     />
   );

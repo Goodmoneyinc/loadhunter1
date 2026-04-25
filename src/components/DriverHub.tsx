@@ -1,8 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Download } from 'lucide-react';
-import { createBrowserSupabaseClient } from '../lib/supabase';
-import { generateDetentionReport } from '@/lib/reports/detentionReport';
-import { downloadDetentionReportPdf } from '@/lib/reports/detentionReportPdf';
+import { useEffect, useState } from 'react';
+import { supabase } from '@/lib/supabase';
 
 type EventType = 'arrived' | 'checked_in' | 'moved' | 'loading_started' | 'departed';
 
@@ -16,68 +13,76 @@ const EVENT_BUTTONS: { label: string; type: EventType }[] = [
 
 interface DriverHubProps {
   trackingId: string;
-  loadId: string;
   loadNumber?: string;
 }
 
-export default function DriverHub({ trackingId, loadId, loadNumber }: DriverHubProps) {
-  const supabase = createBrowserSupabaseClient();
+export default function DriverHub({ trackingId, loadNumber }: DriverHubProps) {
   const [loading, setLoading] = useState<EventType | null>(null);
-  const [pdfLoading, setPdfLoading] = useState(false);
+  const [completedEvents, setCompletedEvents] = useState<Set<EventType>>(new Set());
   const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
-  const [locationStatus, setLocationStatus] = useState<'granted' | 'denied' | 'prompt' | 'unknown'>('unknown');
+  const [isInitializing, setIsInitializing] = useState(true);
+  const [resolvedLoadId, setResolvedLoadId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!navigator.geolocation) {
-      setLocationStatus('denied');
-      return;
-    }
+    const fetchExistingEvents = async () => {
+      const { data: load, error: loadError } = await supabase
+        .from('loads')
+        .select('id')
+        .eq('tracking_id', trackingId)
+        .single();
 
-    if (!navigator.permissions) {
-      setLocationStatus('unknown');
-      return;
-    }
+      if (loadError || !load) {
+        setFeedback({ message: 'Invalid tracking ID', type: 'error' });
+        setIsInitializing(false);
+        return;
+      }
 
-    let mounted = true;
-    let permissionStatus: PermissionStatus | null = null;
+      setResolvedLoadId(load.id);
 
-    navigator.permissions
-      .query({ name: 'geolocation' })
-      .then((result) => {
-        if (!mounted) return;
+      const { data: events, error: eventsError } = await supabase
+        .from('load_events')
+        .select('event_type')
+        .eq('load_id', load.id);
 
-        permissionStatus = result;
-        setLocationStatus(result.state);
+      if (!eventsError && events) {
+        const completed = new Set(events.map((e) => e.event_type as EventType));
+        setCompletedEvents(completed);
+      }
 
-        if (result.state === 'prompt') {
-          navigator.geolocation.getCurrentPosition(
-            () => {
-              if (mounted) setLocationStatus('granted');
-            },
-            () => {
-              if (mounted) setLocationStatus('denied');
-            },
-            { timeout: 5000, enableHighAccuracy: false }
-          );
+      setIsInitializing(false);
+    };
+
+    fetchExistingEvents();
+  }, [trackingId]);
+
+  useEffect(() => {
+    if (isInitializing || !resolvedLoadId) return;
+
+    const channel = supabase
+      .channel(`driver-hub:${trackingId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'load_events',
+          filter: `load_id=eq.${resolvedLoadId}`,
+        },
+        (payload) => {
+          const newEventType = payload.new.event_type as EventType;
+          setCompletedEvents((prev) => new Set(prev).add(newEventType));
         }
-
-        result.onchange = () => {
-          if (mounted) setLocationStatus(result.state);
-        };
-      })
-      .catch(() => {
-        if (mounted) setLocationStatus('unknown');
-      });
+      )
+      .subscribe();
 
     return () => {
-      mounted = false;
-      if (permissionStatus) permissionStatus.onchange = null;
+      supabase.removeChannel(channel);
     };
-  }, []);
+  }, [trackingId, isInitializing, resolvedLoadId]);
 
   const getGeolocation = (): Promise<{ lat: number | null; lng: number | null }> => {
     return new Promise((resolve) => {
-      if (!navigator.geolocation || locationStatus === 'denied') {
+      if (!navigator.geolocation) {
         resolve({ lat: null, lng: null });
         return;
       }
@@ -98,6 +103,12 @@ export default function DriverHub({ trackingId, loadId, loadNumber }: DriverHubP
   };
 
   const handleEvent = async (eventType: EventType) => {
+    if (completedEvents.has(eventType)) {
+      setFeedback({ message: `${eventType} already recorded`, type: 'error' });
+      setTimeout(() => setFeedback(null), 2000);
+      return;
+    }
+
     setLoading(eventType);
     setFeedback(null);
 
@@ -116,25 +127,18 @@ export default function DriverHub({ trackingId, loadId, loadNumber }: DriverHubP
       console.error(error);
       setFeedback({ message: 'Failed to record event. Please try again.', type: 'error' });
     } else {
-      setFeedback({ message: `${eventType.replace('_', ' ')} recorded!`, type: 'success' });
+      const label = EVENT_BUTTONS.find((b) => b.type === eventType)?.label ?? eventType;
+      setFeedback({ message: `${label} recorded!`, type: 'success' });
+      setCompletedEvents((prev) => new Set(prev).add(eventType));
       setTimeout(() => setFeedback(null), 3000);
     }
 
     setLoading(null);
   };
 
-  const locationText = () => {
-    switch (locationStatus) {
-      case 'granted':
-        return 'Location enabled.';
-      case 'denied':
-        return 'Location blocked - coordinates will not be captured.';
-      case 'prompt':
-        return 'Requesting location permission...';
-      default:
-        return 'Location is captured when available.';
-    }
-  };
+  if (isInitializing) {
+    return <div className="py-8 text-center">Loading driver hub...</div>;
+  }
 
   return (
     <div className="min-h-screen bg-gray-100 p-4 flex flex-col items-center justify-center">
@@ -157,33 +161,29 @@ export default function DriverHub({ trackingId, loadId, loadNumber }: DriverHubP
         )}
 
         <div className="space-y-3">
-          {EVENT_BUTTONS.map((btn) => (
-            <button
-              key={btn.type}
-              onClick={() => handleEvent(btn.type)}
-              disabled={loading !== null}
-              className="w-full py-6 text-xl font-semibold rounded-xl shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100"
-              style={{
-                backgroundColor: '#2563eb',
-                color: 'white',
-              }}
-            >
-              {loading === btn.type ? 'Recording...' : btn.label}
-            </button>
-          ))}
+          {EVENT_BUTTONS.map((btn) => {
+            const isCompleted = completedEvents.has(btn.type);
+            return (
+              <button
+                key={btn.type}
+                onClick={() => handleEvent(btn.type)}
+                disabled={loading !== null || isCompleted}
+                className={`w-full rounded-xl py-6 text-xl font-semibold text-white shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 ${
+                  isCompleted ? 'cursor-not-allowed bg-gray-400' : 'bg-blue-600 hover:bg-blue-700'
+                }`}
+              >
+                {loading === btn.type ? 'Recording...' : btn.label}
+                {isCompleted && ' ✓'}
+              </button>
+            );
+          })}
         </div>
 
-        <button
-          type="button"
-          onClick={() => void handleDownloadDetentionPdf()}
-          disabled={loading !== null || pdfLoading}
-          className="w-full flex items-center justify-center gap-2 py-4 text-base font-semibold rounded-xl border-2 border-gray-300 bg-white text-gray-800 shadow-sm transition-all active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100 hover:bg-gray-50"
-        >
-          <Download className="w-5 h-5 shrink-0" aria-hidden />
-          {pdfLoading ? 'Building PDF…' : 'Download detention report (PDF)'}
-        </button>
-
-        <p className="text-xs text-center text-gray-400 mt-8">{locationText()}</p>
+        <p className="text-center text-xs text-gray-400">
+          Location is captured automatically when available.
+          <br />
+          Completed events are marked with ✓ and cannot be re-recorded.
+        </p>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { createBrowserSupabaseClient } from '../lib/supabase';
-import DriverHub from '../components/DriverHub';
+import DriverHubActions from '../components/DriverHubActions';
 import { AlertCircle, Loader2 } from 'lucide-react';
 
 interface TrackedLoad {
@@ -67,7 +67,7 @@ export default function DriverTracking() {
   }
 
   return (
-    <DriverHub
+    <DriverHubActions
       trackingId={trackingId as string}
       loadNumber={load.load_number}
     />

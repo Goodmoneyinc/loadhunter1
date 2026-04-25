@@ -1,6 +1,6 @@
-import DriverHub from '@/components/DriverHub';
+import DriverHubActions from '@/components/DriverHubActions';
 
 export default async function DriverTrackingPage({ params }: { params: { trackingId: string } }) {
   const { trackingId } = await params;
-  return <DriverHub trackingId={trackingId} />;
+  return <DriverHubActions trackingId={trackingId} />;
 }

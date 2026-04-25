@@ -98,7 +98,13 @@ export function downloadDetentionReportPdf(report: DetentionReportInput): void {
     y += LINE;
   } else {
     for (const ev of r.timeline) {
-      const line1 = `${formatWhen(ev.timestamp)} · ${formatEventLabel(ev.eventType)} · GPS: ${ev.gpsAvailable ? 'yes' : 'no'}`;
+      const gpsDetail =
+        ev.gpsLat != null && ev.gpsLong != null
+          ? `${ev.gpsLat.toFixed(5)}, ${ev.gpsLong.toFixed(5)}`
+          : ev.gpsAvailable
+            ? 'yes (coords n/a)'
+            : 'no';
+      const line1 = `${formatWhen(ev.timestamp)} · ${formatEventLabel(ev.eventType)} · GPS: ${gpsDetail}`;
       const noteLine = ev.note ? `Note: ${ev.note}` : '';
       const block = noteLine ? LINE * 2 + 2 : LINE + 1;
       y = ensureSpace(doc, y, block);

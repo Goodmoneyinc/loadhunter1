@@ -65,10 +65,16 @@ export function DetentionReportPDF({ report, load }: DetentionReportPDFProps) {
           <Text style={styles.timelineItem}>No events recorded.</Text>
         ) : (
           report.timeline.map((event, idx) => {
+            const gpsCoords =
+              event.gpsLat != null && event.gpsLong != null
+                ? `GPS ${event.gpsLat.toFixed(5)}, ${event.gpsLong.toFixed(5)}`
+                : event.gpsAvailable
+                  ? 'GPS (no coords)'
+                  : null;
             const line = [
               event.timestamp.toLocaleString(),
               formatEventType(event.eventType),
-              event.gpsAvailable ? 'GPS' : null,
+              gpsCoords,
               event.note ? `Note: ${event.note}` : null,
             ]
               .filter(Boolean)

@@ -16,6 +16,8 @@ export interface DetentionReportData {
     eventType: string;
     note: string | null;
     gpsAvailable: boolean;
+    gpsLat: number | null;
+    gpsLong: number | null;
   }>;
   generatedAt: Date;
 }
@@ -33,6 +35,8 @@ export type DetentionReportWire = Omit<
     eventType: string;
     note: string | null;
     gpsAvailable: boolean;
+    gpsLat?: number | null;
+    gpsLong?: number | null;
   }>;
 };
 
@@ -125,6 +129,8 @@ export async function generateDetentionReport(loadId: string): Promise<Detention
     eventType: event.event_type,
     note: event.note ?? null,
     gpsAvailable: !!(event.gps_lat != null && event.gps_long != null),
+    gpsLat: event.gps_lat,
+    gpsLong: event.gps_long,
   }));
 
   return {

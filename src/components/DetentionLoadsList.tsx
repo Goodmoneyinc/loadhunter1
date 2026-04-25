@@ -5,7 +5,7 @@ import { calculateDetention, type DetentionCalculationEvent } from '@/lib/detent
 import { getDispatcherId } from '@/lib/dispatcher';
 import { supabase } from '@/lib/supabase';
 import type { Load } from '@/types';
-import { SendToBrokerButton } from './SendToBrokerButton';
+import { DetentionReportActions } from './DetentionReportActions';
 
 type LoadDetentionRow = Pick<Load, 'id' | 'load_number' | 'status' | 'free_time_hours' | 'rate_per_hour'>;
 
@@ -163,13 +163,14 @@ export function DetentionLoadsList() {
               <span className="text-xs text-gray-500">{load.detention_hours.toFixed(1)} hrs</span>
             </div>
           </div>
-          <div className="text-right">
+          <div className="text-right min-w-[200px]">
             <div className="text-xl font-bold text-green-700">${load.detention_amount.toFixed(2)}</div>
-            <SendToBrokerButton
+            <DetentionReportActions
               loadId={load.id}
-              currentStatus={load.status}
-              detentionAmount={load.detention_amount}
-              onSuccess={() => void fetchDetentionLoads()}
+              loadNumber={load.load_number}
+              loadStatus={load.status}
+              compact
+              onBrokerSent={() => void fetchDetentionLoads()}
             />
           </div>
         </div>

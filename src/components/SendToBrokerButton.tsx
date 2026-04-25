@@ -7,6 +7,8 @@ interface SendToBrokerButtonProps {
   detentionAmount: number;
   onSuccess?: () => void;
   emailEndpoint?: string;
+  /** Simulates broker email without calling the API or updating the load (for demos / local dev). */
+  mock?: boolean;
 }
 
 interface EmailResponse {
@@ -22,6 +24,7 @@ export function SendToBrokerButton({
   detentionAmount,
   onSuccess,
   emailEndpoint,
+  mock = false,
 }: SendToBrokerButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -34,6 +37,16 @@ export function SendToBrokerButton({
     setMessage(null);
 
     try {
+      if (mock) {
+        await new Promise((r) => setTimeout(r, 650));
+        setMessage({
+          text: 'Mock: broker would receive the detention report (no email sent, load not marked billed).',
+          type: 'success',
+        });
+        onSuccess?.();
+        return;
+      }
+
       const baseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
       const endpoint = emailEndpoint ?? (baseUrl ? `${baseUrl}${DEFAULT_FUNCTION_PATH}` : null);
       if (!endpoint) {

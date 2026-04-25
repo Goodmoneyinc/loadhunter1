@@ -10,6 +10,7 @@ import { useGeofencing } from '../hooks/useGeofencing';
 import { useLiveDetentionCalculator } from '../hooks/useLiveDetentionCalculator';
 import { generateDetentionInvoicePDF } from '../lib/pdfGenerator';
 import { DetentionSummaryCard } from '@/components/DetentionSummaryCard';
+import { DetentionReportActions } from '@/components/DetentionReportActions';
 
 interface Load {
   id: string;
@@ -624,6 +625,21 @@ export default function LoadDetail() {
         freeTimeHours={load.free_time_hours}
         ratePerHour={load.rate_per_hour}
       />
+
+      <div className="rounded-xl border border-slate-800 bg-slate-900/80 p-6">
+        <h3 className="text-lg font-bold text-white">Detention billing proof</h3>
+        <p className="mt-1 text-sm text-slate-400">
+          Export a PDF or CSV with timeline, GPS, and totals for brokers or disputes.
+        </p>
+        <div className="mt-4">
+          <DetentionReportActions
+            loadId={load.id}
+            loadNumber={load.load_number}
+            loadStatus={load.status}
+            onBrokerSent={() => void fetchLoadDetails()}
+          />
+        </div>
+      </div>
 
       {load.facility_lat && load.facility_long && (
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">

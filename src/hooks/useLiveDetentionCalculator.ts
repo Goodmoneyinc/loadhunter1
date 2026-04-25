@@ -28,6 +28,7 @@ export function useLiveDetentionCalculator({
 }: UseLiveDetentionCalculatorInput): UseLiveDetentionCalculatorResult {
   const [nowMs, setNowMs] = useState(() => Date.now());
 
+  /** Tick every second while on site (arrival, no departure) so free-time countdown and live detention stay smooth. */
   useEffect(() => {
     if (!arrival_time || departure_time) {
       return;

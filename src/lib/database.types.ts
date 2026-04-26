@@ -78,6 +78,7 @@ export type Database = {
           dispatcher_id: string;
           driver_id: string | null;
           status: string;
+          detention_invoice_status: 'draft' | 'sent' | 'paid';
           facility_address: string;
           scheduled_time: string | null;
           created_at: string;
@@ -93,6 +94,7 @@ export type Database = {
           dispatcher_id: string;
           driver_id?: string | null;
           status?: string;
+          detention_invoice_status?: 'draft' | 'sent' | 'paid';
           facility_address?: string;
           scheduled_time?: string | null;
           created_at?: string;
@@ -108,6 +110,7 @@ export type Database = {
           dispatcher_id?: string;
           driver_id?: string | null;
           status?: string;
+          detention_invoice_status?: 'draft' | 'sent' | 'paid';
           facility_address?: string;
           scheduled_time?: string | null;
           created_at?: string;

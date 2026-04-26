@@ -6,15 +6,19 @@ import StatusBadge from '../components/StatusBadge';
 import DashboardMap from '../components/DashboardMap';
 import DriverSimulator from '../components/DriverSimulator';
 import DetentionCalculator from '../components/DetentionCalculator';
+import DetentionRevenueHeader from '@/components/DetentionRevenueHeader';
+import { DetentionAnalyticsCards } from '@/components/dashboard/DetentionAnalyticsCards';
 import { DetentionRevenueSummary } from '@/components/DetentionRevenueSummary';
 import DetentionRevenueBar from '@/components/DetentionRevenueBar';
 import LiveDetention from '../components/LiveDetention';
 import { useRealtimeStats } from '../hooks/useRealtimeStats';
+import { supabase } from '@/lib/supabase';
 
 export default function Dashboard() {
   const { loads, stats, leaderboardStats, loading } = useRealtimeStats();
   const [dispatcherLocation, setDispatcherLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [mapExpanded, setMapExpanded] = useState(false);
+  const [insight, setInsight] = useState('Loading live insights...');
   const intervalRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -85,6 +89,67 @@ export default function Dashboard() {
 
   const recentLoads = loads.slice(0, 5);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function refreshInsights() {
+      if (loads.length === 0) {
+        if (!cancelled) setInsight('Add loads to unlock live detention insights.');
+        return;
+      }
+
+      const loadIds = loads.map((l) => l.id);
+      const weekStart = new Date();
+      weekStart.setDate(weekStart.getDate() - 7);
+
+      const { data, error } = await supabase
+        .from('load_events')
+        .select('event_type, timestamp')
+        .in('load_id', loadIds)
+        .gte('timestamp', weekStart.toISOString());
+
+      if (error || !data) {
+        if (!cancelled) setInsight('Live insights unavailable right now. Data will refresh automatically.');
+        return;
+      }
+
+      const arrivalsByHour = new Map<number, number>();
+      data.forEach((event) => {
+        if (event.event_type !== 'arrived') return;
+        const hour = new Date(event.timestamp).getHours();
+        arrivalsByHour.set(hour, (arrivalsByHour.get(hour) ?? 0) + 1);
+      });
+
+      let peakHour: number | null = null;
+      let peakCount = 0;
+      arrivalsByHour.forEach((count, hour) => {
+        if (count > peakCount) {
+          peakCount = count;
+          peakHour = hour;
+        }
+      });
+
+      const onTimeRate = stats.totalActive > 0 ? Math.round((stats.onTime / stats.totalActive) * 100) : 0;
+      const delayedRate = stats.totalActive > 0 ? Math.round((stats.delayed / stats.totalActive) * 100) : 0;
+
+      const peakWindow =
+        peakHour === null
+          ? 'No peak arrival hour yet'
+          : `${String(peakHour).padStart(2, '0')}:00-${String((peakHour + 1) % 24).padStart(2, '0')}:00`;
+
+      if (!cancelled) {
+        setInsight(`On-time rate is ${onTimeRate}% this week (${delayedRate}% delayed). Peak arrival hour is ${peakWindow}.`);
+      }
+    }
+
+    void refreshInsights();
+    const timer = window.setInterval(() => void refreshInsights(), 30_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [loads, stats.delayed, stats.onTime, stats.totalActive]);
+
   if (loading) {
     return (
       <div className="space-y-8 bg-[#1A1A1A] min-h-screen">
@@ -108,6 +173,8 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6 bg-[#1A1A1A] min-h-screen">
+      <DetentionRevenueHeader />
+      <DetentionAnalyticsCards />
       <SubscriptionBanner />
       <DetentionRevenueBar />
 
@@ -233,7 +300,7 @@ export default function Dashboard() {
             </div>
             <div className="px-5 py-4">
               <p className="text-xs text-gray-400 leading-relaxed">
-                Driver efficiency is up 12% this week. Peak detention hours are between 2-4 PM.
+                {insight}
               </p>
               <div className="mt-3 flex gap-2">
                 <button className="px-3 py-1.5 rounded-lg bg-[#FF6B00]/20 text-[#FF6B00] text-xs font-bold hover:bg-[#FF6B00]/30 transition-all">

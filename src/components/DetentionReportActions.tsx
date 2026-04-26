@@ -13,7 +13,7 @@ const MOCK_BROKER =
 export interface DetentionReportActionsProps {
   loadId: string;
   loadNumber: string;
-  loadStatus: string;
+  invoiceStatus: 'draft' | 'sent' | 'paid';
   /** Called after a real or mock broker send succeeds, and after downloads if you need parent refresh */
   onBrokerSent?: () => void;
   /** Tighter layout for table rows */
@@ -23,7 +23,7 @@ export interface DetentionReportActionsProps {
 export function DetentionReportActions({
   loadId,
   loadNumber,
-  loadStatus,
+  invoiceStatus,
   onBrokerSent,
   compact,
 }: DetentionReportActionsProps) {
@@ -59,7 +59,7 @@ export function DetentionReportActions({
     downloadDetentionReportCsv(report);
   };
 
-  const canSendBroker = (report?.totalAmount ?? 0) > 0 && loadStatus !== 'billed';
+  const canSendBroker = (report?.totalAmount ?? 0) > 0 && invoiceStatus === 'draft';
 
   if (loading) {
     return (
@@ -112,7 +112,7 @@ export function DetentionReportActions({
         {canSendBroker ? (
           <SendToBrokerButton
             loadId={loadId}
-            currentStatus={loadStatus}
+            currentStatus={invoiceStatus}
             detentionAmount={report.totalAmount}
             mock={MOCK_BROKER}
             onSuccess={() => {
@@ -125,13 +125,13 @@ export function DetentionReportActions({
             type="button"
             disabled
             title={
-              loadStatus === 'billed'
-                ? 'Load already marked billed'
+              invoiceStatus !== 'draft'
+                ? 'Already sent to broker'
                 : 'No billable detention yet — report still available to download'
             }
             className={`${secondary} cursor-not-allowed opacity-60`}
           >
-            Send to Broker
+            {invoiceStatus === 'paid' ? 'Paid' : invoiceStatus === 'sent' ? 'Already Sent' : 'Send to Broker'}
           </button>
         )}
       </div>

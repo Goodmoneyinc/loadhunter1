@@ -11,6 +11,42 @@ export interface LiveDetentionCalculatorProps {
   loadId: string;
 }
 
+const EVENT_SEQUENCE = ['arrived', 'checked_in', 'moved', 'loading_started', 'departed'] as const;
+
+type SequencedEventType = (typeof EVENT_SEQUENCE)[number];
+type LoadTimelineEvent = {
+  event_type: string;
+  timestamp: string;
+};
+
+function resolveTimelineTimes(events: LoadTimelineEvent[]): { arrivalTime: string | null; departureTime: string | null } {
+  let stageIndex = -1;
+  let arrivalTime: string | null = null;
+  let departureTime: string | null = null;
+
+  for (const event of events) {
+    const eventStage = EVENT_SEQUENCE.indexOf(event.event_type as SequencedEventType);
+    if (eventStage === -1) continue;
+
+    if (eventStage === stageIndex + 1) {
+      stageIndex = eventStage;
+      if (event.event_type === 'arrived' && !arrivalTime) {
+        arrivalTime = event.timestamp;
+      }
+      if (event.event_type === 'departed') {
+        departureTime = event.timestamp;
+      }
+      continue;
+    }
+
+    if (eventStage === stageIndex && event.event_type === 'departed') {
+      departureTime = event.timestamp;
+    }
+  }
+
+  return { arrivalTime, departureTime };
+}
+
 function formatHMS(totalMs: number): string {
   const sec = Math.max(0, Math.floor(totalMs / 1000));
   const h = Math.floor(sec / 3600);
@@ -25,6 +61,7 @@ export function LiveDetentionCalculator({ loadId }: LiveDetentionCalculatorProps
   const [ratePerHour, setRatePerHour] = useState<number>(75);
   const [arrivalTime, setArrivalTime] = useState<string | null>(null);
   const [departureTime, setDepartureTime] = useState<string | null>(null);
+  const [serverNowUtc, setServerNowUtc] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,22 +89,31 @@ export function LiveDetentionCalculator({ loadId }: LiveDetentionCalculatorProps
     setFreeTimeHours(loadRow.free_time_hours ?? 2);
     setRatePerHour(loadRow.rate_per_hour ?? 75);
 
-    const { data: detentionRow, error: detErr } = await supabase
-      .from('detention_events')
-      .select('arrival_time, departure_time')
-      .eq('load_id', loadId)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (detErr) {
-      setError(detErr.message);
+    const { data: serverNowData, error: serverNowError } = await supabase.rpc('get_server_utc_now');
+    if (serverNowError) {
+      setError(serverNowError.message);
       setLoading(false);
       return;
     }
 
-    setArrivalTime(detentionRow?.arrival_time ?? null);
-    setDepartureTime(detentionRow?.departure_time ?? null);
+    setServerNowUtc(serverNowData ?? null);
+
+    const { data: events, error: eventsError } = await supabase
+      .from('load_events')
+      .select('event_type, timestamp')
+      .eq('load_id', loadId)
+      .in('event_type', ['arrived', 'departed'])
+      .order('timestamp', { ascending: true });
+
+    if (eventsError) {
+      setError(eventsError.message);
+      setLoading(false);
+      return;
+    }
+
+    const timeline = resolveTimelineTimes(events ?? []);
+    setArrivalTime(timeline.arrivalTime);
+    setDepartureTime(timeline.departureTime);
     setLoading(false);
   }, [loadId]);
 
@@ -76,11 +122,33 @@ export function LiveDetentionCalculator({ loadId }: LiveDetentionCalculatorProps
   }, [refresh]);
 
   useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      void refresh({ silent: true });
+    }, 30000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [refresh]);
+
+  useEffect(() => {
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        void refresh({ silent: true });
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [refresh]);
+
+  useEffect(() => {
     const ch = supabase
       .channel(`live-detention:${loadId}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'detention_events', filter: `load_id=eq.${loadId}` },
+        { event: '*', schema: 'public', table: 'load_events', filter: `load_id=eq.${loadId}` },
         () => {
           void refresh({ silent: true });
         }
@@ -104,6 +172,7 @@ export function LiveDetentionCalculator({ loadId }: LiveDetentionCalculatorProps
     departure_time: departureTime,
     free_time_hours: freeTimeHours,
     rate_per_hour: ratePerHour,
+    server_now_utc: serverNowUtc,
   });
 
   if (loading) {
@@ -229,6 +298,7 @@ export function LiveDetentionCalculator({ loadId }: LiveDetentionCalculatorProps
           >
             {formatted_detention_amount}
           </p>
+          <p className="text-sm font-semibold text-slate-700">You're currently at {formatted_detention_amount}</p>
           <p className="text-center text-xs text-slate-500">
             {ratePerHour.toFixed(2)} USD/h · {freeTimeHours}h free · on site {formatHMS(onSiteMs)} total
           </p>

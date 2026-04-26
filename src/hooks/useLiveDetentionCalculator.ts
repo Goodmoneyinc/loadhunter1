@@ -5,6 +5,7 @@ interface UseLiveDetentionCalculatorInput {
   departure_time?: string | null | undefined;
   free_time_hours: number;
   rate_per_hour: number;
+  server_now_utc?: string | null | undefined;
   locale?: string;
   currency?: string;
 }
@@ -23,10 +24,24 @@ export function useLiveDetentionCalculator({
   departure_time,
   free_time_hours,
   rate_per_hour,
+  server_now_utc,
   locale = 'en-US',
   currency = 'USD',
 }: UseLiveDetentionCalculatorInput): UseLiveDetentionCalculatorResult {
-  const [nowMs, setNowMs] = useState(() => Date.now());
+  const [serverBaseMs, setServerBaseMs] = useState<number | null>(() => {
+    const initial = server_now_utc ? new Date(server_now_utc).getTime() : NaN;
+    return Number.isFinite(initial) ? initial : null;
+  });
+  const [perfBaseMs, setPerfBaseMs] = useState<number>(() => performance.now());
+
+  useEffect(() => {
+    const parsed = server_now_utc ? new Date(server_now_utc).getTime() : NaN;
+    if (!Number.isFinite(parsed)) return;
+    setServerBaseMs(parsed);
+    setPerfBaseMs(performance.now());
+  }, [server_now_utc]);
+
+  const [liveNowMs, setLiveNowMs] = useState<number>(() => Date.now());
 
   /** Tick every second while on site (arrival, no departure) so free-time countdown and live detention stay smooth. */
   useEffect(() => {
@@ -35,15 +50,20 @@ export function useLiveDetentionCalculator({
     }
 
     const intervalId = window.setInterval(() => {
-      setNowMs(Date.now());
+      const nextNow =
+        serverBaseMs !== null
+          ? serverBaseMs + (performance.now() - perfBaseMs)
+          : Date.now();
+      setLiveNowMs(nextNow);
     }, 1000);
 
     return () => window.clearInterval(intervalId);
-  }, [arrival_time, departure_time]);
+  }, [arrival_time, departure_time, serverBaseMs, perfBaseMs]);
 
   return useMemo(() => {
     const arrivalMs = arrival_time ? new Date(arrival_time).getTime() : NaN;
-    const endMs = departure_time ? new Date(departure_time).getTime() : nowMs;
+    const settledEndMs = departure_time ? new Date(departure_time).getTime() : NaN;
+    const endMs = Number.isFinite(settledEndMs) ? settledEndMs : liveNowMs;
 
     if (!Number.isFinite(arrivalMs) || !Number.isFinite(endMs) || endMs <= arrivalMs) {
       return {
@@ -73,7 +93,7 @@ export function useLiveDetentionCalculator({
   }, [
     arrival_time,
     departure_time,
-    nowMs,
+    liveNowMs,
     free_time_hours,
     rate_per_hour,
     locale,

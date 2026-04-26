@@ -4,6 +4,8 @@ import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { LoadEventType } from '@/types/load-events';
 import { formatTime } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { getDispatcherId } from '@/lib/dispatcher';
 
 type EventType = LoadEventType;
 
@@ -37,6 +39,11 @@ interface LastEventRow {
   note: string | null;
 }
 
+type EventAvailability = {
+  disabled: boolean;
+  reason?: string;
+};
+
 interface DriverHubActionsProps {
   trackingId: string;
   /** Optional — avoids waiting on load fetch for header */
@@ -44,34 +51,48 @@ interface DriverHubActionsProps {
 }
 
 export default function DriverHubActions({ trackingId, loadNumber: loadNumberProp }: DriverHubActionsProps) {
+  const { user } = useAuth();
   const [loadId, setLoadId] = useState<string | null>(null);
   const [loadNumber, setLoadNumber] = useState<string | undefined>(loadNumberProp);
   const [loadStatus, setLoadStatus] = useState<string | null>(null);
+  const [dispatcherIdForLoad, setDispatcherIdForLoad] = useState<string | null>(null);
   const [lastEvent, setLastEvent] = useState<LastEventRow | null>(null);
+  const [completedEvents, setCompletedEvents] = useState<Set<EventType>>(new Set());
   const [moveNote, setMoveNote] = useState('');
   const [loading, setLoading] = useState<EventType | null>(null);
   const [initError, setInitError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [ready, setReady] = useState(false);
+  const [manualEditMode, setManualEditMode] = useState(false);
+  const [canOverride, setCanOverride] = useState(false);
 
-  const refreshLastEvent = useCallback(async (id: string) => {
+  const refreshEventsState = useCallback(async (id: string) => {
     const { data, error } = await supabase
       .from('load_events')
       .select('event_type, timestamp, note')
       .eq('load_id', id)
-      .order('timestamp', { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .order('timestamp', { ascending: false });
 
     if (error) {
       console.error(error);
       return;
     }
-    if (data) {
+
+    const typedEvents =
+      data?.map((row) => ({
+        event_type: row.event_type as EventType,
+        timestamp: row.timestamp,
+        note: row.note,
+      })) ?? [];
+
+    setCompletedEvents(new Set(typedEvents.map((e) => e.event_type)));
+
+    if (typedEvents.length > 0) {
+      const latest = typedEvents[0];
       setLastEvent({
-        event_type: data.event_type as EventType,
-        timestamp: data.timestamp,
-        note: data.note,
+        event_type: latest.event_type,
+        timestamp: latest.timestamp,
+        note: latest.note,
       });
     } else {
       setLastEvent(null);
@@ -85,7 +106,7 @@ export default function DriverHubActions({ trackingId, loadNumber: loadNumberPro
       setInitError(null);
       const { data: load, error } = await supabase
         .from('loads')
-        .select('id, load_number, status')
+        .select('id, load_number, status, dispatcher_id')
         .eq('tracking_id', trackingId)
         .maybeSingle();
 
@@ -100,7 +121,8 @@ export default function DriverHubActions({ trackingId, loadNumber: loadNumberPro
       setLoadId(load.id);
       setLoadNumber((prev) => load.load_number ?? prev);
       setLoadStatus(load.status ?? null);
-      await refreshLastEvent(load.id);
+      setDispatcherIdForLoad(load.dispatcher_id ?? null);
+      await refreshEventsState(load.id);
       setReady(true);
     }
 
@@ -108,7 +130,28 @@ export default function DriverHubActions({ trackingId, loadNumber: loadNumberPro
     return () => {
       cancelled = true;
     };
-  }, [trackingId, refreshLastEvent]);
+  }, [trackingId, refreshEventsState]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function resolveOverridePermission() {
+      if (!user || !dispatcherIdForLoad) {
+        if (!cancelled) setCanOverride(false);
+        return;
+      }
+
+      const currentDispatcherId = await getDispatcherId();
+      if (!cancelled) {
+        setCanOverride(Boolean(currentDispatcherId && currentDispatcherId === dispatcherIdForLoad));
+      }
+    }
+
+    void resolveOverridePermission();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, dispatcherIdForLoad]);
 
   useEffect(() => {
     if (!loadId) return;
@@ -124,7 +167,7 @@ export default function DriverHubActions({ trackingId, loadNumber: loadNumberPro
           filter: `load_id=eq.${loadId}`,
         },
         () => {
-          void refreshLastEvent(loadId);
+          void refreshEventsState(loadId);
         }
       )
       .subscribe();
@@ -132,7 +175,27 @@ export default function DriverHubActions({ trackingId, loadNumber: loadNumberPro
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [loadId, refreshLastEvent]);
+  }, [loadId, refreshEventsState]);
+
+  function getEventAvailability(eventType: EventType): EventAvailability {
+    if (manualEditMode && canOverride) {
+      return { disabled: false };
+    }
+
+    if (eventType === 'checked_in' && !completedEvents.has('arrived')) {
+      return { disabled: true, reason: 'Must mark Arrived first' };
+    }
+
+    if (eventType === 'loading_started' && !completedEvents.has('checked_in')) {
+      return { disabled: true, reason: 'Must mark Checked In first' };
+    }
+
+    if (eventType === 'departed' && !completedEvents.has('arrived')) {
+      return { disabled: true, reason: 'Must mark Arrived first' };
+    }
+
+    return { disabled: false };
+  }
 
   const getGeolocation = (): Promise<{ lat: number | null; lng: number | null }> => {
     return new Promise((resolve) => {
@@ -154,6 +217,15 @@ export default function DriverHubActions({ trackingId, loadNumber: loadNumberPro
 
   const logEvent = async (eventType: EventType) => {
     if (!loadId) return;
+    const availability = getEventAvailability(eventType);
+    if (availability.disabled) {
+      setFeedback({
+        message: availability.reason ?? 'This action is blocked until prerequisite events are logged.',
+        type: 'error',
+      });
+      setTimeout(() => setFeedback(null), 2800);
+      return;
+    }
 
     if (lastEvent?.event_type === eventType) {
       setFeedback({
@@ -172,14 +244,25 @@ export default function DriverHubActions({ trackingId, loadNumber: loadNumberPro
 
     const { lat, lng } = await getGeolocation();
 
-    const { error } = await supabase.rpc('insert_load_event_via_tracking', {
-      p_tracking_id: trackingId,
-      p_event_type: eventType,
-      p_timestamp: new Date().toISOString(),
-      p_gps_lat: lat,
-      p_gps_long: lng,
-      p_note: note,
-    });
+    const { error } =
+      manualEditMode && canOverride
+        ? await supabase.rpc('insert_load_event_override', {
+            p_load_id: loadId,
+            p_event_type: eventType,
+            p_timestamp: new Date().toISOString(),
+            p_gps_lat: lat,
+            p_gps_long: lng,
+            p_note: note,
+            p_override_reason: 'Fix timeline (DriverHub)',
+          })
+        : await supabase.rpc('insert_load_event_via_tracking', {
+            p_tracking_id: trackingId,
+            p_event_type: eventType,
+            p_timestamp: new Date().toISOString(),
+            p_gps_lat: lat,
+            p_gps_long: lng,
+            p_note: note,
+          });
 
     setLoading(null);
 
@@ -195,7 +278,7 @@ export default function DriverHubActions({ trackingId, loadNumber: loadNumberPro
       type: 'success',
     });
     setTimeout(() => setFeedback(null), 2800);
-    await refreshLastEvent(loadId);
+    await refreshEventsState(loadId);
   };
 
   if (!ready) {
@@ -253,20 +336,35 @@ export default function DriverHubActions({ trackingId, loadNumber: loadNumberPro
         )}
 
         <div className="space-y-3">
+          {canOverride && (
+            <button
+              type="button"
+              onClick={() => setManualEditMode((prev) => !prev)}
+              className={`w-full rounded-xl border px-4 py-3 text-sm font-semibold transition ${
+                manualEditMode
+                  ? 'border-amber-500 bg-amber-50 text-amber-900'
+                  : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              {manualEditMode ? 'Fix timeline mode: ON' : 'Fix timeline'}
+            </button>
+          )}
+
           {ACTIONS.map(({ type, label }) => {
             const isDuplicateNext = lastEvent?.event_type === type;
+            const availability = getEventAvailability(type);
             const busy = loading !== null;
+            const isDisabled = busy || isDuplicateNext || availability.disabled;
+            const title =
+              availability.reason ??
+              (isDuplicateNext ? 'Same as your last log — use the next step when it happens' : undefined);
             return (
               <div key={type}>
                 <button
                   type="button"
                   onClick={() => void logEvent(type)}
-                  disabled={busy || isDuplicateNext}
-                  title={
-                    isDuplicateNext
-                      ? 'Same as your last log — use the next step when it happens'
-                      : undefined
-                  }
+                  disabled={isDisabled}
+                  title={title}
                   className="flex w-full min-h-[3.5rem] items-center justify-center rounded-2xl bg-blue-600 px-4 py-4 text-lg font-semibold text-white shadow-md transition active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500 disabled:shadow-none"
                 >
                   {loading === type ? 'Saving…' : label}

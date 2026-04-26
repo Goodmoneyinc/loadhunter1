@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { generateDetentionReport } from '@/lib/reports/detentionReport';
+import { buildDetentionReportPdfBlob } from '@/lib/reports/detentionReportPdf';
 
 interface SendToBrokerButtonProps {
   loadId: string;
-  currentStatus: string;
+  currentStatus: 'draft' | 'sent' | 'paid';
   detentionAmount: number;
   onSuccess?: () => void;
   emailEndpoint?: string;
-  /** Simulates broker email without calling the API or updating the load (for demos / local dev). */
+  /** Simulates broker email send (default: true). */
   mock?: boolean;
 }
 
@@ -24,12 +26,12 @@ export function SendToBrokerButton({
   detentionAmount,
   onSuccess,
   emailEndpoint,
-  mock = false,
+  mock = true,
 }: SendToBrokerButtonProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
-  const canSend = detentionAmount > 0 && currentStatus !== 'billed';
+  const canSend = detentionAmount > 0 && currentStatus === 'draft';
 
   const handleSend = async () => {
     if (!canSend) return;
@@ -37,10 +39,28 @@ export function SendToBrokerButton({
     setMessage(null);
 
     try {
+      const report = await generateDetentionReport(loadId);
+      const { blob, filename } = buildDetentionReportPdfBlob(report);
+
       if (mock) {
         await new Promise((r) => setTimeout(r, 650));
+        void blob;
+        void filename;
+
+        const { error: updateError } = await supabase
+          .from('loads')
+          .update({
+            detention_invoice_status: 'sent',
+            detention_emailed_at: new Date().toISOString(),
+          })
+          .eq('id', loadId);
+
+        if (updateError) {
+          throw new Error(updateError.message);
+        }
+
         setMessage({
-          text: 'Mock: broker would receive the detention report (no email sent, load not marked billed).',
+          text: 'Detention report generated and mock email sent to broker. Status updated to Sent.',
           type: 'success',
         });
         onSuccess?.();
@@ -73,14 +93,17 @@ export function SendToBrokerButton({
 
       const { error: updateError } = await supabase
         .from('loads')
-        .update({ status: 'billed', detention_emailed_at: new Date().toISOString() })
+        .update({
+          detention_invoice_status: 'sent',
+          detention_emailed_at: new Date().toISOString(),
+        })
         .eq('id', loadId);
 
       if (updateError) {
         throw new Error(updateError.message);
       }
 
-      setMessage({ text: 'Report sent and load marked as billed!', type: 'success' });
+      setMessage({ text: 'Report sent and invoice status marked as Sent.', type: 'success' });
       onSuccess?.();
     } catch (err) {
       console.error(err);
@@ -94,17 +117,16 @@ export function SendToBrokerButton({
     }
   };
 
-  if (!canSend) return null;
-
   return (
     <div>
       <button
         type="button"
         onClick={() => void handleSend()}
-        disabled={isLoading}
-        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-sm font-medium rounded-md transition"
+        disabled={isLoading || !canSend}
+        title={!canSend ? 'Already sent to broker' : undefined}
+        className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white text-sm font-medium rounded-md transition disabled:cursor-not-allowed"
       >
-        {isLoading ? 'Sending...' : 'Send to Broker'}
+        {isLoading ? 'Sending...' : currentStatus === 'paid' ? 'Paid' : currentStatus === 'sent' ? 'Already Sent' : 'Send to Broker'}
       </button>
       {message && (
         <div className={`mt-2 text-sm ${message.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>

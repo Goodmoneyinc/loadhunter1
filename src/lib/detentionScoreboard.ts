@@ -1,15 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Database } from './database.types';
 import { supabase } from './supabase';
+import { calculateDetention } from './detention.utils';
 
 type ScoreboardLoad = Pick<
   Database['public']['Tables']['loads']['Row'],
   'id' | 'free_time_hours' | 'rate_per_hour'
 >;
 
-type ScoreboardDetentionEvent = Pick<
-  Database['public']['Tables']['detention_events']['Row'],
-  'load_id' | 'arrival_time' | 'departure_time' | 'created_at'
+type ScoreboardLoadEvent = Pick<
+  Database['public']['Tables']['load_events']['Row'],
+  'load_id' | 'event_type' | 'timestamp'
 >;
 
 export interface DetentionScoreboardData {
@@ -28,37 +29,10 @@ function roundCurrency(value: number): number {
   return Number(value.toFixed(2));
 }
 
-function calculateDetentionAmount(
-  arrivalTime: string,
-  departureTime: string | null,
-  freeTimeHours: number,
-  ratePerHour: number,
-  now: Date
-): { detentionHours: number; detentionAmount: number; isActive: boolean } {
-  const arrival = new Date(arrivalTime);
-  if (Number.isNaN(arrival.getTime())) {
-    return { detentionHours: 0, detentionAmount: 0, isActive: false };
-  }
-
-  const resolvedDeparture = departureTime ? new Date(departureTime) : now;
-  if (Number.isNaN(resolvedDeparture.getTime())) {
-    return { detentionHours: 0, detentionAmount: 0, isActive: false };
-  }
-
-  const diffHours = Math.max(0, (resolvedDeparture.getTime() - arrival.getTime()) / (1000 * 60 * 60));
-  const detentionHours = Math.max(0, diffHours - freeTimeHours);
-  const detentionAmount = detentionHours * ratePerHour;
-
-  return {
-    detentionHours,
-    detentionAmount,
-    isActive: !departureTime,
-  };
-}
-
 /**
  * Computes detention scoreboard aggregates for a dispatcher.
- * Uses `loads` + latest `detention_events` row per load.
+ * Uses `loads` + `load_events` (first arrived / last departed) and
+ * shared detention math from `detention.utils`.
  */
 export async function getDetentionScoreboardData(
   options: GetDetentionScoreboardOptions
@@ -83,47 +57,58 @@ export async function getDetentionScoreboardData(
   const loadIds = loads.map((load) => load.id);
   const loadById = new Map(loads.map((load: ScoreboardLoad) => [load.id, load]));
 
-  const { data: detentionEvents, error: eventsError } = await supabaseClient
-    .from('detention_events')
-    .select('load_id, arrival_time, departure_time, created_at')
+  const { data: loadEvents, error: eventsError } = await supabaseClient
+    .from('load_events')
+    .select('load_id, event_type, timestamp')
     .in('load_id', loadIds);
 
-  if (eventsError || !detentionEvents) {
-    throw new Error('Failed to fetch detention events for detention scoreboard');
+  if (eventsError || !loadEvents) {
+    throw new Error('Failed to fetch load events for detention scoreboard');
   }
 
-  // Keep latest detention row per load by created_at.
-  const latestEventByLoad = new Map<string, ScoreboardDetentionEvent>();
-  detentionEvents.forEach((event: ScoreboardDetentionEvent) => {
-    const existing = latestEventByLoad.get(event.load_id);
-    if (!existing || new Date(event.created_at).getTime() > new Date(existing.created_at).getTime()) {
-      latestEventByLoad.set(event.load_id, event);
-    }
+  const eventsByLoad = new Map<string, ScoreboardLoadEvent[]>();
+  loadEvents.forEach((event: ScoreboardLoadEvent) => {
+    const list = eventsByLoad.get(event.load_id) ?? [];
+    list.push(event);
+    eventsByLoad.set(event.load_id, list);
   });
 
   let totalDetentionRevenue = 0;
   let activeDetentionLoads = 0;
   let todaysRevenue = 0;
 
-  latestEventByLoad.forEach((event, loadId) => {
-    if (!event.arrival_time) return;
+  eventsByLoad.forEach((events, loadId) => {
     const load = loadById.get(loadId);
     if (!load) return;
 
-    const { detentionHours, detentionAmount, isActive } = calculateDetentionAmount(
-      event.arrival_time,
-      event.departure_time,
-      load.free_time_hours,
-      load.rate_per_hour,
-      now
+    const sorted = [...events].sort(
+      (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+    );
+    const arrival = sorted.find((e) => e.event_type === 'arrived')?.timestamp ?? null;
+    const departure = [...sorted].reverse().find((e) => e.event_type === 'departed')?.timestamp ?? null;
+    if (!arrival) return;
+
+    const { detention_hours: completedDetentionHours, detention_amount: completedDetentionAmount } = calculateDetention(
+      {
+        free_time_hours: load.free_time_hours,
+        rate_per_hour: load.rate_per_hour,
+      },
+      sorted
     );
 
-    totalDetentionRevenue += detentionAmount;
-    if (isActive && detentionHours > 0) {
+    const activeDetentionAmount = !departure
+      ? Math.max(0, ((now.getTime() - new Date(arrival).getTime()) / (1000 * 60 * 60)) - load.free_time_hours) *
+        load.rate_per_hour
+      : 0;
+    const effectiveAmount = departure ? completedDetentionAmount : activeDetentionAmount;
+    const effectiveHours = departure ? completedDetentionHours : effectiveAmount / Math.max(load.rate_per_hour, 1);
+
+    totalDetentionRevenue += effectiveAmount;
+    if (!departure && effectiveHours > 0) {
       activeDetentionLoads += 1;
     }
-    if (event.created_at.slice(0, 10) === todayKey) {
-      todaysRevenue += detentionAmount;
+    if (departure && departure.slice(0, 10) === todayKey) {
+      todaysRevenue += effectiveAmount;
     }
   });
 

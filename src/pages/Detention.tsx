@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Clock, TrendingUp, AlertTriangle, BarChart3, Loader2, ChevronDown } from 'lucide-react';
+import { Loader2, ChevronDown } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface DetentionEvent {
@@ -31,6 +31,11 @@ function formatDuration(hours: number): string {
   return `${h}h ${m}m`;
 }
 
+function csvEscape(cell: string): string {
+  if (/[",\r\n]/.test(cell)) return `"${cell.replace(/"/g, '""')}"`;
+  return cell;
+}
+
 export default function Detention() {
   const [events, setEvents] = useState<DetentionEvent[]>([]);
   const [loads, setLoads] = useState<Load[]>([]);
@@ -39,6 +44,70 @@ export default function Detention() {
   const [timeframe, setTimeframe] = useState('all-time');
   const [selectedDriver, setSelectedDriver] = useState('all-drivers');
   const [selectedFacility, setSelectedFacility] = useState('all-facilities');
+
+  function exportLast7DaysDetention() {
+    const windowStart = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+    const rows = events
+      .filter((e) => new Date(e.arrival_time).getTime() >= windowStart.getTime())
+      .map((event) => {
+        const load = loadsMap.get(event.load_id);
+        const hours = getDurationHours(event.arrival_time, event.departure_time);
+        const detentionHours = hours == null ? null : Math.max(0, hours - 2);
+        const revenue = detentionHours == null ? null : detentionHours * 75;
+        return {
+          loadId: event.load_id,
+          facility: load?.facility_address ?? 'Unknown',
+          arrival: event.arrival_time,
+          departure: event.departure_time ?? '',
+          totalHours: hours,
+          detentionHours,
+          revenue,
+          status: event.departure_time ? 'completed' : 'active',
+        };
+      });
+
+    const lines: string[] = [];
+    lines.push(
+      [
+        'load_id',
+        'facility_address',
+        'arrival_time_utc',
+        'departure_time_utc',
+        'total_hours_on_site',
+        'detention_hours',
+        'detention_revenue_usd',
+        'status',
+      ]
+        .map(csvEscape)
+        .join(',')
+    );
+
+    for (const row of rows) {
+      lines.push(
+        [
+          row.loadId,
+          row.facility,
+          row.arrival,
+          row.departure,
+          row.totalHours == null ? '' : row.totalHours.toFixed(4),
+          row.detentionHours == null ? '' : row.detentionHours.toFixed(4),
+          row.revenue == null ? '' : row.revenue.toFixed(2),
+          row.status,
+        ]
+          .map((cell) => csvEscape(String(cell)))
+          .join(',')
+      );
+    }
+
+    const blob = new Blob([lines.join('\r\n')], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    a.href = url;
+    a.download = `detention-last-7-days-${stamp}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   useEffect(() => {
     fetchDetentionData();
@@ -75,11 +144,9 @@ export default function Detention() {
   const driversMap = new Map(drivers.map((d) => [d.id, d]));
 
   const completedEvents = events.filter((e) => e.departure_time);
-  const activeEvents = events.filter((e) => !e.departure_time);
 
   const durations = completedEvents.map((e) => getDurationHours(e.arrival_time, e.departure_time)!);
   const avgHours = durations.length > 0 ? durations.reduce((a, b) => a + b, 0) / durations.length : 0;
-  const maxHours = durations.length > 0 ? Math.max(...durations) : 0;
   const totalCost = durations.reduce((sum, h) => sum + Math.max(0, h - 2) * 75, 0);
   const avgCostPerLoad = completedEvents.length > 0 ? totalCost / completedEvents.length : 0;
 
@@ -160,6 +227,13 @@ export default function Detention() {
 
       {/* Filter Bar */}
       <div className="flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={exportLast7DaysDetention}
+          className="px-4 py-2.5 bg-electric-cyan/20 border border-electric-cyan/40 rounded-lg text-sm text-electric-cyan font-semibold hover:bg-electric-cyan/30 transition-all"
+        >
+          Export Last 7 Days
+        </button>
         <div className="relative">
           <select
             value={timeframe}

@@ -23,7 +23,7 @@ function ensureSpace(doc: jsPDF, y: number, needed: number): number {
   return y;
 }
 
-export function downloadDetentionReportPdf(report: DetentionReportInput): void {
+function buildDetentionReportPdf(report: DetentionReportInput): { doc: jsPDF; filename: string } {
   const r = normalizeDetentionReportInput(report);
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
@@ -134,5 +134,16 @@ export function downloadDetentionReportPdf(report: DetentionReportInput): void {
   );
 
   const safeNum = r.loadNumber.replace(/[^\w.-]+/g, '_');
-  doc.save(`detention-report-${safeNum}-${Date.now()}.pdf`);
+  return { doc, filename: `detention-report-${safeNum}-${Date.now()}.pdf` };
+}
+
+export function buildDetentionReportPdfBlob(report: DetentionReportInput): { blob: Blob; filename: string } {
+  const { doc, filename } = buildDetentionReportPdf(report);
+  const blob = doc.output('blob');
+  return { blob, filename };
+}
+
+export function downloadDetentionReportPdf(report: DetentionReportInput): void {
+  const { doc, filename } = buildDetentionReportPdf(report);
+  doc.save(filename);
 }

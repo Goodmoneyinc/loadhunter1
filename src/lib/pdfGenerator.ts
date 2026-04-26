@@ -1,5 +1,13 @@
 import { jsPDF } from 'jspdf';
 
+interface TimelineProofEvent {
+  eventType: string;
+  timestamp: string;
+  gpsLat: string | null;
+  gpsLong: string | null;
+  note?: string | null;
+}
+
 interface DetentionClaimData {
   companyName: string;
   loadNumber: string;
@@ -10,12 +18,39 @@ interface DetentionClaimData {
   calculatedCost: number;
   driverName: string;
   gpsVerified: boolean;
+  ratePerHour?: number;
+  freeTimeHours?: number;
+  arrivalGpsLat?: string | null;
+  arrivalGpsLong?: string | null;
+  departureGpsLat?: string | null;
+  departureGpsLong?: string | null;
+  bolImageUrl?: string | null;
+  timelineEvents?: TimelineProofEvent[];
 }
 
-export function generateDetentionClaimPDF(data: DetentionClaimData): void {
+async function fetchImageDataUrl(url: string): Promise<string | null> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) return null;
+    const blob = await response.blob();
+    if (!blob.type.startsWith('image/')) return null;
+
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function generateDetentionInvoicePDF(data: DetentionClaimData): Promise<{ blob: Blob; filename: string }> {
   const doc = new jsPDF();
 
   const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
   const margin = 20;
   let yPos = 20;
 
@@ -25,7 +60,7 @@ export function generateDetentionClaimPDF(data: DetentionClaimData): void {
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(24);
   doc.setFont('helvetica', 'bold');
-  doc.text('DETENTION CLAIM', pageWidth / 2, 20, { align: 'center' });
+  doc.text('DETENTION INVOICE', pageWidth / 2, 20, { align: 'center' });
 
   yPos = 50;
   doc.setTextColor(0, 0, 0);
@@ -98,6 +133,8 @@ export function generateDetentionClaimPDF(data: DetentionClaimData): void {
       minute: '2-digit',
       hour12: true,
     })],
+    ['Arrival GPS:', `${data.arrivalGpsLat ?? 'N/A'}, ${data.arrivalGpsLong ?? 'N/A'}`],
+    ['Departure GPS:', `${data.departureGpsLat ?? 'N/A'}, ${data.departureGpsLong ?? 'N/A'}`],
   ];
 
   timelineData.forEach(([label, value]) => {
@@ -117,6 +154,34 @@ export function generateDetentionClaimPDF(data: DetentionClaimData): void {
     doc.setFont('helvetica', 'bold');
     doc.text('✓ GPS VERIFIED - Location confirmed within 200m geofence', margin + 5, yPos + 2);
     doc.setTextColor(0, 0, 0);
+  }
+
+  if (Array.isArray(data.timelineEvents) && data.timelineEvents.length > 0) {
+    yPos += 18;
+    doc.setFontSize(13);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Proof Timestamps', margin, yPos);
+    yPos += 8;
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    const proofEvents = data.timelineEvents.slice(0, 8);
+    for (const event of proofEvents) {
+      if (yPos > pageHeight - 30) {
+        doc.addPage();
+        yPos = 20;
+      }
+      const gps = `${event.gpsLat ?? 'N/A'}, ${event.gpsLong ?? 'N/A'}`;
+      const line = `${event.eventType} - ${new Date(event.timestamp).toLocaleString()} - GPS: ${gps}`;
+      doc.text(line, margin, yPos);
+      yPos += 6;
+      if (event.note) {
+        doc.setTextColor(100, 116, 139);
+        doc.text(`Note: ${event.note}`, margin + 3, yPos);
+        doc.setTextColor(0, 0, 0);
+        yPos += 5;
+      }
+    }
   }
 
   yPos += 20;
@@ -145,13 +210,13 @@ export function generateDetentionClaimPDF(data: DetentionClaimData): void {
   doc.setFont('helvetica', 'normal');
   doc.text('Free Time (Standard):', margin + 5, yPos);
   doc.setFont('helvetica', 'bold');
-  doc.text('2h 0m', pageWidth - margin - 5, yPos, { align: 'right' });
+  doc.text(`${data.freeTimeHours ?? 2}h 0m`, pageWidth - margin - 5, yPos, { align: 'right' });
 
   yPos += 10;
   doc.setFont('helvetica', 'normal');
   doc.text('Billable Time:', margin + 5, yPos);
   doc.setFont('helvetica', 'bold');
-  const billableHours = Math.max(0, data.totalDuration - 2);
+  const billableHours = Math.max(0, data.totalDuration - (data.freeTimeHours ?? 2));
   const billableH = Math.floor(billableHours);
   const billableM = Math.round((billableHours - billableH) * 60);
   doc.setTextColor(234, 88, 12);
@@ -174,7 +239,38 @@ export function generateDetentionClaimPDF(data: DetentionClaimData): void {
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(9);
   doc.setFont('helvetica', 'normal');
-  doc.text('Rate: $75.00 per hour | Industry standard detention rate applied', margin, yPos);
+  const rate = data.ratePerHour ?? 75;
+  doc.text(`Rate: $${rate.toFixed(2)} per hour | Free time: ${data.freeTimeHours ?? 2}h`, margin, yPos);
+
+  if (data.bolImageUrl) {
+    yPos += 14;
+    doc.setTextColor(0, 0, 0);
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('BOL Proof', margin, yPos);
+    yPos += 5;
+
+    const bolImageData = await fetchImageDataUrl(data.bolImageUrl);
+    if (bolImageData) {
+      const imageHeight = 45;
+      const imageWidth = 70;
+      if (yPos + imageHeight > pageHeight - 20) {
+        doc.addPage();
+        yPos = 20;
+      }
+      doc.addImage(bolImageData, 'JPEG', margin, yPos, imageWidth, imageHeight, undefined, 'FAST');
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.text('Attached BOL image (if available)', margin, yPos + imageHeight + 5);
+      yPos += imageHeight + 8;
+    } else {
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(37, 99, 235);
+      doc.textWithLink('Open BOL image', margin, yPos + 4, { url: data.bolImageUrl });
+      doc.setTextColor(0, 0, 0);
+      yPos += 10;
+    }
+  }
 
   yPos += 30;
   doc.setDrawColor(229, 231, 235);
@@ -201,7 +297,7 @@ export function generateDetentionClaimPDF(data: DetentionClaimData): void {
     doc.text(term, margin, yPos);
   });
 
-  yPos = doc.internal.pageSize.getHeight() - 20;
+  yPos = pageHeight - 20;
   doc.setFontSize(8);
   doc.setTextColor(100, 116, 139);
   doc.text(
@@ -211,6 +307,17 @@ export function generateDetentionClaimPDF(data: DetentionClaimData): void {
     { align: 'center' }
   );
 
-  const filename = `Detention_Claim_${data.loadNumber}_${new Date().getTime()}.pdf`;
-  doc.save(filename);
+  const filename = `Detention_Invoice_${data.loadNumber}_${new Date().getTime()}.pdf`;
+  const blob = doc.output('blob');
+  return { blob, filename };
+}
+
+export async function generateDetentionClaimPDF(data: DetentionClaimData): Promise<void> {
+  const { blob, filename } = await generateDetentionInvoicePDF(data);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.click();
+  URL.revokeObjectURL(url);
 }

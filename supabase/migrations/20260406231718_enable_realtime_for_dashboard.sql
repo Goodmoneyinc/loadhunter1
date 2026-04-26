@@ -1,22 +1,4 @@
-/*
-  # Enable Realtime for Dashboard Tables
-
-  1. Changes
-    - Enable Realtime publication for `loads` table
-    - Enable Realtime publication for `drivers` table
-    - Enable Realtime publication for `subscriptions` table (for leaderboard stats)
-
-  2. Purpose
-    - Allow real-time updates to dashboard stats and leaderboard
-    - Automatically refresh UI when new loads or drivers are added/updated
-    - Live subscription count updates for leaderboard metrics
-*/
-
--- Enable realtime for loads table
-ALTER PUBLICATION supabase_realtime ADD TABLE loads;
-
--- Enable realtime for drivers table
-ALTER PUBLICATION supabase_realtime ADD TABLE drivers;
-
--- Enable realtime for subscriptions table (for stats tracking)
-ALTER PUBLICATION supabase_realtime ADD TABLE subscriptions;
+/*\n  # Enable Realtime for Dashboard Tables\n\n  1. Changes\n    - Enable Realtime publication for `loads` table\n    - Enable Realtime publication for `drivers` table\n    - Enable Realtime publication for `subscriptions` table (for leaderboard stats)\n\n  2. Purpose\n    - Allow real-time updates to dashboard stats and leaderboard\n    - Automatically refresh UI when new loads or drivers are added/updated\n    - Live subscription count updates for leaderboard metrics\n*/\n\n-- Enable realtime for loads table\nALTER PUBLICATION supabase_realtime ADD TABLE loads;
+\n\n-- Enable realtime for drivers table\nALTER PUBLICATION supabase_realtime ADD TABLE drivers;
+\n\n-- Enable realtime for subscriptions table (for stats tracking)\nALTER PUBLICATION supabase_realtime ADD TABLE subscriptions;
+\n;

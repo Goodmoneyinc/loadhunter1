@@ -163,10 +163,17 @@ const driverIcon = new DivIcon({
 function MapSizeInvalidator() {
   const map = useMap();
   useEffect(() => {
-    const timer = setTimeout(() => {
+    const invalidate = () => {
       map.invalidateSize();
-    }, 100);
-    return () => clearTimeout(timer);
+    };
+
+    const timer = window.setTimeout(invalidate, 100);
+    window.addEventListener('resize', invalidate);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener('resize', invalidate);
+    };
   }, [map]);
   return null;
 }

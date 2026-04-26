@@ -1,26 +1,4 @@
-/*
-  # Add detention status and enable realtime for driver GPS
-
-  1. Modified Tables
-    - `detention_events`
-      - Added `status` column (text, default 'active') to track whether detention is active or completed
-    - `drivers`
-      - Enabled realtime publication for live GPS map sync
-
-  2. Security
-    - No RLS changes needed (existing policies cover these tables)
-
-  3. Notes
-    - The status column allows the dashboard to query for active detention events
-    - Realtime on drivers table enables live map marker movement
-*/
-
-DO $$
-BEGIN
-  IF NOT EXISTS (
-    SELECT 1 FROM information_schema.columns
-    WHERE table_name = 'detention_events' AND column_name = 'status'
-  ) THEN
-    ALTER TABLE detention_events ADD COLUMN status text DEFAULT 'active';
-  END IF;
-END $$;
+/*\n  # Add detention status and enable realtime for driver GPS\n\n  1. Modified Tables\n    - `detention_events`\n      - Added `status` column (text, default 'active') to track whether detention is active or completed\n    - `drivers`\n      - Enabled realtime publication for live GPS map sync\n\n  2. Security\n    - No RLS changes needed (existing policies cover these tables)\n\n  3. Notes\n    - The status column allows the dashboard to query for active detention events\n    - Realtime on drivers table enables live map marker movement\n*/\n\nDO $$\nBEGIN\n  IF NOT EXISTS (\n    SELECT 1 FROM information_schema.columns\n    WHERE table_name = 'detention_events' AND column_name = 'status'\n  ) THEN\n    ALTER TABLE detention_events ADD COLUMN status text DEFAULT 'active';
+\n  END IF;
+\nEND $$;
+\n;

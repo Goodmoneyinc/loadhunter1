@@ -1,12 +1,2 @@
-/*
-  # Enable realtime for detention_events table
-
-  1. Changes
-    - Add `detention_events` table to the Supabase realtime publication
-    - This enables the dashboard to receive live updates when detention events are created or updated
-
-  2. Notes
-    - Allows the Live Detention widget to update in real-time as detention clocks tick
-*/
-
-ALTER PUBLICATION supabase_realtime ADD TABLE detention_events;
+/*\n  # Enable realtime for detention_events table\n\n  1. Changes\n    - Add `detention_events` table to the Supabase realtime publication\n    - This enables the dashboard to receive live updates when detention events are created or updated\n\n  2. Notes\n    - Allows the Live Detention widget to update in real-time as detention clocks tick\n*/\n\nALTER PUBLICATION supabase_realtime ADD TABLE detention_events;
+\n;
